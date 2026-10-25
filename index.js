@@ -1,534 +1,1185 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const telegraf_1 = require("telegraf");
-const dotenv = __importStar(require("dotenv"));
-const express_1 = __importDefault(require("express"));
-const pg_1 = require("pg");
-const sharp_1 = __importDefault(require("sharp"));
-const https_1 = __importDefault(require("https"));
+import { Telegraf, Markup } from 'telegraf';
+import dotenv from 'dotenv';
+import express from 'express';
+import pkg from 'pg';
+import sharp from 'sharp';
+import https from 'https';
+
 dotenv.config();
+
+const { Client } = pkg;
 const token = process.env.BOT_TOKEN;
-if (!token)
-    throw new Error('BOT_TOKEN bulunamadı!');
-const bot = new telegraf_1.Telegraf(token);
-const app = (0, express_1.default)();
-const db = new pg_1.Client({
+if (!token) throw new Error('BOT_TOKEN bulunamadı!');
+
+const bot = new Telegraf(token);
+const app = express();
+
+const db = new Client({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
+
 db.connect().then(async () => {
-    await db.query('CREATE TABLE IF NOT EXISTS system_vault (id INT PRIMARY KEY, total_profit INT DEFAULT 0)').catch(() => { });
-    await db.query('INSERT INTO system_vault (id, total_profit) VALUES (1, 0) ON CONFLICT DO NOTHING').catch(() => { });
-    await db.query('ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT false').catch(() => { });
-    await db.query('ALTER TABLE chip_wallets ADD COLUMN last_reward_date VARCHAR(20) DEFAULT null').catch(() => { });
-    await db.query('ALTER TABLE chip_wallets ADD COLUMN reward_week_start VARCHAR(20) DEFAULT null').catch(() => { });
-    await db.query('ALTER TABLE chip_wallets ADD COLUMN reward_weekly_count INT DEFAULT 0').catch(() => { });
-    console.log("✅ Veritabanı ve Kararlı Sistem aktif.");
+    await db.query('CREATE TABLE IF NOT EXISTS system_vault (id INT PRIMARY KEY, total_profit INT DEFAULT 0)').catch(()=>{});
+    await db.query('INSERT INTO system_vault (id, total_profit) VALUES (1, 0) ON CONFLICT DO NOTHING').catch(()=>{});
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false').catch(()=>{});
+    await db.query('ALTER TABLE chip_wallets ADD COLUMN IF NOT EXISTS last_reward_date VARCHAR(20) DEFAULT null').catch(()=>{});
+    await db.query('ALTER TABLE chip_wallets ADD COLUMN IF NOT EXISTS reward_week_start VARCHAR(20) DEFAULT null').catch(()=>{});
+    await db.query('ALTER TABLE chip_wallets ADD COLUMN IF NOT EXISTS reward_weekly_count INT DEFAULT 0').catch(()=>{});
+    await db.query('ALTER TABLE chip_wallets ADD COLUMN IF NOT EXISTS daily_spent_chips INT DEFAULT 0').catch(()=>{});
+    await db.query('ALTER TABLE chip_wallets ADD COLUMN IF NOT EXISTS last_spend_date VARCHAR(20) DEFAULT null').catch(()=>{});
+    
+    await db.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS is_messaging_enabled BOOLEAN DEFAULT true').catch(()=>{});
+    
+    // Kesintisiz İlan Taslağı Tablosu
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS product_drafts (
+            telegram_id BIGINT PRIMARY KEY,
+            title TEXT,
+            price INT,
+            file_id TEXT
+        )
+    `).catch(()=>{});
+
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS seller_ratings (
+            id SERIAL PRIMARY KEY,
+            seller_id INT,
+            buyer_id INT,
+            product_id INT,
+            rating INT,
+            UNIQUE(buyer_id, product_id)
+        )
+    `).catch(()=>{});
+
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS withdrawal_requests (
+            id SERIAL PRIMARY KEY,
+            user_id INT,
+            chips_amount INT,
+            tl_amount DECIMAL(10,2),
+            iban VARCHAR(100),
+            full_name VARCHAR(150),
+            status VARCHAR(20) DEFAULT 'BEKLIYOR',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `).catch(()=>{});
+
+    console.log("✅ Veritabanı ve Kesintisiz Sistem aktif.");
 }).catch(err => console.error("❌ Veritabanı hatası:", err));
-// ==========================================
-// 🚨 GÜVENLİK VE ÖDEME BİLGİLERİ (BURALARI KENDİNE GÖRE DOLDUR) 🚨
-// ==========================================
-const PATRON_ID = "BURAYA_ID_YAZILACAK"; // Örnek: "123456789"
-const PATRON_IBAN = "TR00 0000 0000 0000 0000 0000 00";
-const PATRON_AD_SOYAD = "İSİM SOYİSİM";
+
+const PATRON_ID = "1572275874"; 
+const PATRON_IBAN = "TR00 0000 0000 0000 0000 0000 00"; 
+const PATRON_AD_SOYAD = "İSİM SOYİSİM"; 
+const GRUP_ID = "-100XXXXXXXXXX"; 
+
 const sohbetHafizasi = {};
 const geciciVeri = {};
 const ilanKuyrugu = [];
 let kuyrukİsleniyor = false;
+
+async function getSellerBadge(sellerId) {
+    try {
+        const res = await db.query('SELECT AVG(rating) as avg_rating, COUNT(rating) as total_votes FROM seller_ratings WHERE seller_id = $1', [sellerId]);
+        if (res.rows.length > 0 && res.rows[0].total_votes > 0) {
+            const avg = parseFloat(res.rows[0].avg_rating).toFixed(1);
+            const votes = res.rows[0].total_votes;
+            if (avg >= 4.5 && votes >= 2) {
+                return ` ⭐ ${avg} (👑 Güvenilir Satıcı)`;
+            } else {
+                return ` ⭐ ${avg} (${votes} Oy)`;
+            }
+        }
+    } catch(e) {}
+    return ' ⭐ Yeni Satıcı';
+}
+
 async function ilanKuyrugunuIsle() {
-    if (kuyrukİsleniyor || ilanKuyrugu.length === 0)
-        return;
+    if (kuyrukİsleniyor || ilanKuyrugu.length === 0) return;
     kuyrukİsleniyor = true;
+
     while (ilanKuyrugu.length > 0) {
         const ilan = ilanKuyrugu.shift();
-        if (!ilan)
-            break;
+        if (!ilan) break;
+
         try {
             const tumKullanicilar = await db.query('SELECT telegram_user_id FROM users');
             for (const hedefUser of tumKullanicilar.rows) {
                 try {
-                    await bot.telegram.sendPhoto(hedefUser.telegram_user_id, ilan.blurredFileId, {
-                        caption: ilan.captionText,
-                        ...ilan.butonlar
+                    await bot.telegram.sendPhoto(hedefUser.telegram_user_id, ilan.blurredFileId, { 
+                        caption: ilan.captionText, 
+                        ...ilan.butonlar 
                     });
-                }
-                catch (err) { }
+                } catch (err) {}
             }
-        }
-        catch (e) { }
+        } catch (e) {}
+
         if (ilanKuyrugu.length > 0) {
             await new Promise(resolve => setTimeout(resolve, 10000));
         }
     }
     kuyrukİsleniyor = false;
 }
-const anaMenu = telegraf_1.Markup.keyboard([
-    ['🏪 İlan Ver', '💰 Bakiyem'],
-    ['🎁 Günlük Ödül', 'ℹ️ Yardım']
-]).resize().persistent();
+
+const anaMenu = Markup.keyboard([
+    ['🏪 İlan Ver', '🎁 Günlük Ödül'],
+    ['💰 Bakiye Çek', '📊 Çip Fiyat Politikası'],
+    ['💬 Admin ile Görüş']
+]).resize();
+
 bot.use(async (ctx, next) => {
     if (ctx.from) {
         try {
             const userCheck = await db.query('SELECT is_banned FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
             if (userCheck.rows.length > 0 && userCheck.rows[0].is_banned) {
                 if (ctx.callbackQuery) {
-                    await ctx.answerCbQuery('❌ BANLANDINIZ!', { show_alert: true }).catch(() => { });
+                    await ctx.answerCbQuery('❌ BANLANDINIZ!', { show_alert: true }).catch(()=>{});
+                } else if (ctx.message) {
+                    await ctx.reply('🔨 Hesabınız KALICI OLARAK YASAKLANMIŞTIR.');
                 }
-                else if (ctx.message) {
-                    await ctx.reply('🔨 Hesabınız KALICI OLARAK YASAKLANMIŞTIR.').catch(() => { });
-                }
-                return;
+                return; 
             }
-        }
-        catch (e) { }
+        } catch (e) {}
     }
     return next();
 });
+
 async function sendWelcomeOrHelp(ctx, username) {
-    await ctx.reply(`🎉 **Özel Pazara Hoş Geldin, ${username}!**\n\n` +
+    await ctx.reply(
+        `🎉 **Özel Pazara Hoş Geldin, ${username}!**\n\n` +
         `📖 **Kullanım Talimatı:**\n` +
         `1️⃣ **İlan Ver:** Kendi mağazanı kurup gizli görseller paylaşabilir ve çip kazanabilirsin.\n` +
         `2️⃣ **Çip Harca / İçerik Aç:** Vitrine düşen bulanık görselleri çiplerini kullanarak açabilirsin.\n` +
         `3️⃣ **Günlük Ödül:** Her gün menüden günlük ödülünü alarak ücretsiz çip toplayabilirsin.\n` +
-        `4️⃣ **Bakiye:** Çip bakiyeni kontrol edebilir ve havale/EFT ile bakiye yükleyebilirsin.\n\n` +
-        `💡 Sohbet ekranını temizlediğinde menü kaybolursa dilediğin an **/start** komutunu yazarak menüyü ve başlangıç rehberini tekrar getirebilirsin!\n\n` +
-        `Aşağıdaki kalıcı menüyü dilediğin gibi kullanmaya başlayabilirsin! 🚀`, { parse_mode: 'Markdown', ...anaMenu });
+        `4️⃣ **Çip Fiyat Politikası:** Çip paketlerini, kullanılabilir bakiyeni inceleyebilir ve havale/EFT ile bakiye yükleyebilirsin.\n\n` +
+        `Aşağıdaki menüyü dilediğin gibi kullanabilirsin! 🚀`,
+        { parse_mode: 'Markdown', ...anaMenu }
+    );
 }
-bot.start(async (ctx) => {
+
+const handleStart = async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
+    delete geciciVeri[ctx.from.id];
     const telegramId = ctx.from.id;
     const username = ctx.from.username || ctx.from.first_name || 'Kullanıcı';
+
     try {
         const userCheck = await db.query('SELECT * FROM users WHERE telegram_user_id = $1', [telegramId]);
         if (userCheck.rows.length === 0) {
             const insertUser = await db.query('INSERT INTO users (telegram_user_id, username) VALUES ($1, $2) RETURNING id', [telegramId, username]);
             await db.query('INSERT INTO chip_wallets (user_id, available_balance) VALUES ($1, $2)', [insertUser.rows[0].id, 100]);
             await sendWelcomeOrHelp(ctx, username);
-        }
-        else {
+        } else {
             await ctx.reply(`👋 Tekrar hoş geldin ${username}! İşlemlerine menüden devam edebilirsin:`, anaMenu);
         }
-    }
-    catch (error) { }
-});
+    } catch (error) {}
+};
+
+bot.start(handleStart);
+bot.command('start', handleStart);
+
 // ==========================================
-// 👑 VIP YÖNETİCİ KOMUTLARI
+// 👑 YÖNETİCİ & ÇİP İŞLEMLERİ KOMUTLARI
 // ==========================================
 bot.command('admin', async (ctx) => {
-    if (ctx.from.id.toString() !== PATRON_ID)
-        return;
+    if (ctx.from.id.toString() !== PATRON_ID) return;
     try {
         const usersCount = await db.query('SELECT COUNT(*) FROM users');
         const sellersCount = await db.query('SELECT COUNT(*) FROM seller_profiles');
         const productsCount = await db.query('SELECT COUNT(*) FROM products');
         const vault = await db.query('SELECT total_profit FROM system_vault WHERE id = 1');
         const karlar = vault.rows[0] ? vault.rows[0].total_profit : 0;
-        ctx.reply(`👑 **VIP YÖNETİCİ PANELİ** 👑\n\n👥 Kullanıcı: ${usersCount.rows[0].count}\n🏪 Mağaza: ${sellersCount.rows[0].count}\n📦 Ürün: ${productsCount.rows[0].count}\n\n💎 **SİSTEMİN NET KÂRI: ${karlar} Çip**\n\n🚨 /ban <ID>\n💸 /cipekle <ID> <Miktar>\n🗑️ /cipsil <ID> <Miktar>\n🏪 /saticilar\n👥 /musteriler`);
-    }
-    catch (e) { }
+        
+        ctx.reply(`👑 **VIP YÖNETİCİ PANELİ** 👑\n\n👥 Kullanıcı: ${usersCount.rows[0].count}\n🏪 Mağaza: ${sellersCount.rows[0].count}\n📦 Ürün: ${productsCount.rows[0].count}\n\n💎 **SİSTEMİN NET KÂRI: ${karlar} Çip**\n\n🚨 /ban <ID>\n🔨 /gruptancikar <ID>\n🔒 /grubukapat\n🔓 /grubuac\n💸 /cipekle <ID> <Miktar>\n🗑️ /cipsil <ID> <Miktar>\n🗑️ /urunsifirla (Tüm Ürünleri Siler)\n📢 /duyuru <Mesaj>\n🏪 /saticilar\n👥 /musteriler`);
+    } catch (e) {}
 });
+
+// 🗑️ TÜM ÜRÜNLERİ SIFIRLAMA KOMUTU
+bot.command('urunsifirla', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return ctx.reply('❌ Bu komutu kullanmaya yetkin yok.');
+    try {
+        await db.query('DELETE FROM product_images;');
+        await db.query('DELETE FROM seller_ratings;');
+        await db.query('DELETE FROM products;');
+        await ctx.reply('✅ Başarılı! Veritabanındaki tüm ürünler, görseller ve değerlendirmeler tamamen silindi.', anaMenu);
+    } catch (error) {
+        console.error('Ürün sifirlama hatası:', error);
+        await ctx.reply('❌ Ürünler sıfırlanırken bir veritabanı hatası oluştu.');
+    }
+});
+
+// 🏪 MAĞAZA ADINI DEĞİŞTİRME KOMUTU
+bot.command('magazadi', async (ctx) => {
+    const yeniAd = ctx.message.text.split(' ').slice(1).join(' ').trim();
+    
+    if (!yeniAd) {
+        return ctx.reply('❌ Lütfen geçerli bir yeni mağaza adı yazın.\nÖrnek: `/magazadi Petshopya`', { parse_mode: 'Markdown' });
+    }
+
+    try {
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
+        if (userCheck.rows.length === 0) {
+            return ctx.reply('⚠️ Önce /start yazarak kayıt olmalısınız!');
+        }
+        const userId = userCheck.rows[0].id;
+
+        const sellerCheck = await db.query('SELECT id FROM seller_profiles WHERE user_id = $1', [userId]);
+        if (sellerCheck.rows.length === 0) {
+            return ctx.reply('❌ Henüz kayıtlı bir mağazanız yok. Önce "İlan Ver" butonunu kullanarak mağazanızı oluşturmalısınız.');
+        }
+
+        await db.query('UPDATE seller_profiles SET store_name = $1 WHERE user_id = $2', [yeniAd, userId]);
+
+        await ctx.reply(`✅ Mağaza adınız başarıyla **${yeniAd}** olarak güncellendi!`, { parse_mode: 'Markdown' });
+    } catch (error) {
+        console.error('Mağaza adı güncelleme hatası:', error);
+        await ctx.reply('❌ Mağaza adı değiştirilirken bir veritabanı hatası oluştu.');
+    }
+});
+
+bot.command('duyuru', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) {
+        return ctx.reply('Bu komutu kullanmaya yetkin yok.');
+    }
+
+    const broadcastText = ctx.message.text.split(' ').slice(1).join(' ');
+    if (!broadcastText) {
+        return ctx.reply('Lütfen duyuru metnini yazın.\nÖrnek: /duyuru Yeni ürünler eklendi!');
+    }
+
+    await ctx.reply('📢 Özel duyuru gönderimi başlatıldı, lütfen bekleyin...');
+
+    try {
+        const result = await db.query('SELECT telegram_user_id FROM users');
+        const users = result.rows;
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const user of users) {
+            try {
+                await bot.telegram.sendMessage(user.telegram_user_id, broadcastText, {
+                    parse_mode: 'Markdown'
+                });
+                successCount++;
+                await new Promise(resolve => setTimeout(resolve, 50));
+            } catch (error) {
+                failCount++;
+            }
+        }
+
+        await ctx.reply(`✅ Duyuru başarıyla tamamlandı!\n\n- Başarılı Özel Gönderim: ${successCount}\n- Başarısız (Botu engelleyenler): ${failCount}`);
+    } catch (err) {
+        console.error('Duyuru hatası:', err);
+        await ctx.reply('❌ Duyuru gönderilirken bir veritabanı hatası oluştu.');
+    }
+});
+
 bot.command('saticilar', async (ctx) => {
-    if (ctx.from.id.toString() !== PATRON_ID)
-        return;
+    if (ctx.from.id.toString() !== PATRON_ID) return;
     try {
         const saticilar = await db.query(`
-            SELECT s.store_name, u.telegram_user_id, w.available_balance 
+            SELECT s.id, s.store_name, u.telegram_user_id, w.available_balance 
             FROM seller_profiles s
             JOIN users u ON s.user_id = u.id
             JOIN chip_wallets w ON u.id = w.user_id
             ORDER BY w.available_balance DESC LIMIT 20
         `);
-        if (saticilar.rows.length === 0)
-            return ctx.reply('Henüz hiç satıcı mağazası yok.');
-        let mesaj = `🏆 **SATICI CÜZDANLARI RÖNTGENİ** 🏆\n\n`;
-        saticilar.rows.forEach((sat, index) => {
-            mesaj += `${index + 1}. 🏪 ${sat.store_name} \vert{} 💰 ${sat.available_balance} Çip\n(ID: \`${sat.telegram_user_id}\`)\n\n`;
-        });
+
+        if (saticilar.rows.length === 0) return ctx.reply('Henüz hiç satıcı mağazası yok.');
+
+        let mesaj = `🏆 **SATICI CÜZDANLARI VE PUANLARI** 🏆\n\n`;
+        for (let i = 0; i < saticilar.rows.length; i++) {
+            const sat = saticilar.rows[i];
+            const rozet = await getSellerBadge(sat.id);
+            mesaj += `${i + 1}. 🏪 ${sat.store_name} | 💰 ${sat.available_balance} Çip${rozet}\n(ID: \`${sat.telegram_user_id}\`)\n\n`;
+        }
         ctx.reply(mesaj, { parse_mode: 'Markdown' });
-    }
-    catch (e) {
+    } catch (e) {
         ctx.reply('❌ Liste çekilemedi.');
     }
 });
+
 bot.command('musteriler', async (ctx) => {
-    if (ctx.from.id.toString() !== PATRON_ID)
-        return;
+    if (ctx.from.id.toString() !== PATRON_ID) return;
     try {
         const musteriler = await db.query(`
-            SELECT u.username, u.telegram_user_id, w.available_balance 
+            SELECT u.username, u.telegram_user_id, w.available_balance, w.daily_spent_chips, w.last_spend_date 
             FROM users u
             JOIN chip_wallets w ON u.id = w.user_id
             LEFT JOIN seller_profiles s ON u.id = s.user_id
             WHERE s.id IS NULL
             ORDER BY w.available_balance DESC LIMIT 20
         `);
-        if (musteriler.rows.length === 0)
-            return ctx.reply('Sistemde müşteri yok.');
-        let mesaj = `👥 **MÜŞTERİ CÜZDANLARI RÖNTGENİ** 👥\n\n`;
+
+        if (musteriler.rows.length === 0) return ctx.reply('Sistemde müşteri yok.');
+
+        const bugun = new Date().toISOString().split('T')[0];
+        let mesaj = `👥 **MÜŞTERİ CÜZDANLARI VE VIP DURUMU** 👥\n\n`;
         musteriler.rows.forEach((mus, index) => {
             const isim = mus.username || "İsimsiz";
-            mesaj += `${index + 1}. 👤 ${isim} \vert{} 💰 ${mus.available_balance} Çip\n(ID: \`${mus.telegram_user_id}\`)\n\n`;
+            const spent = (mus.last_spend_date === bugun) ? (mus.daily_spent_chips || 0) : 0;
+            const isVip = spent >= 1500 ? "👑 [VIP ALICI]" : "";
+            mesaj += `${index + 1}. 👤 ${isim} | 💰 ${mus.available_balance} Çip | Bugün Harcanan: ${spent} Çip ${isVip}\n(ID: \`${mus.telegram_user_id}\`)\n\n`;
         });
         ctx.reply(mesaj, { parse_mode: 'Markdown' });
-    }
-    catch (e) {
+    } catch (e) {
         ctx.reply('❌ Liste çekilemedi.');
     }
 });
-bot.command('cipsil', async (ctx) => {
-    if (ctx.from.id.toString() !== PATRON_ID)
-        return;
-    const mesajParcalari = ctx.message.text.split(' ');
-    if (mesajParcalari.length !== 3)
-        return ctx.reply('❌ Doğrusu: /cipsil 123456789 500');
-    try {
-        const targetUser = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [mesajParcalari[1]]);
-        if (targetUser.rows.length === 0)
-            return ctx.reply('❌ Bu ID bulunamadı.');
-        const silinecekMiktar = parseInt(mesajParcalari[2]);
-        await db.query(`UPDATE chip_wallets SET available_balance = GREATEST(available_balance - $1, 0) WHERE user_id = $2`, [silinecekMiktar, targetUser.rows[0].id]);
-        ctx.reply(`🗑️ Başarılı! \`${mesajParcalari[1]}\` ID'li hesaptan ${silinecekMiktar} Çip silindi.`, { parse_mode: 'Markdown' });
-        bot.telegram.sendMessage(mesajParcalari[1], `💸 Ödeme Bildirimi: Yönetici ödemenizi gerçekleştirdi ve cüzdanınızdan ${silinecekMiktar} Çip düşüldü.`).catch(() => { });
+
+bot.command('cipekle', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return;
+
+    const args = ctx.message.text.split(' ').slice(1);
+    if (args.length !== 2) {
+        return ctx.reply('❌ Doğrusu:\n`/cipekle 1572275874 5000`', { parse_mode: 'Markdown' });
     }
-    catch (error) { }
+
+    const hedefTelegramId = args[0].trim();
+    const eklenecekCip = Number(args[1]);
+
+    if (isNaN(eklenecekCip) || eklenecekCip <= 0) {
+        return ctx.reply('❌ Lütfen geçerli bir çip miktarı yazın.');
+    }
+
+    try {
+        let userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [hedefTelegramId]);
+        let userId;
+
+        if (userCheck.rows.length === 0) {
+            const newUser = await db.query('INSERT INTO users (telegram_user_id, username) VALUES ($1, $2) RETURNING id', [hedefTelegramId, 'Kullanici']);
+            userId = newUser.rows[0].id;
+        } else {
+            userId = userCheck.rows[0].id;
+        }
+
+        let walletCheck = await db.query('SELECT id FROM chip_wallets WHERE user_id = $1', [userId]);
+        if (walletCheck.rows.length === 0) {
+            await db.query('INSERT INTO chip_wallets (user_id, available_balance) VALUES ($1, $2)', [userId, eklenecekCip]);
+        } else {
+            await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [eklenecekCip, userId]);
+        }
+
+        const finalWallet = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const yeniBakiye = finalWallet.rows[0].available_balance;
+
+        await ctx.reply(`✅ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li kullanıcıya *${eklenecekCip} Çip* eklendi.\n🪙 Yeni Toplam Bakiye: *${yeniBakiye} Çip*`, { parse_mode: 'Markdown' });
+        bot.telegram.sendMessage(hedefTelegramId, `🎉 Hesabınıza yönetici tarafından **${eklenecekCip} Çip** eklendi! Güncel bakiyeniz: ${yeniBakiye} Çip.`, { parse_mode: 'Markdown' }).catch(() => {});
+    } catch (error) {
+        await ctx.reply('❌ Veritabanında çip eklenirken hata oluştu.');
+    }
 });
+
+bot.command('cipsil', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return;
+
+    const args = ctx.message.text.split(' ').slice(1);
+    if (args.length !== 2) {
+        return ctx.reply('❌ Doğru kullanım:\n`/cipsil 1572275874 100`', { parse_mode: 'Markdown' });
+    }
+
+    const hedefTelegramId = args[0].trim();
+    const silinecekCip = Number(args[1]);
+
+    if (isNaN(silinecekCip) || silinecekCip <= 0) {
+        return ctx.reply('❌ Lütfen geçerli bir çip miktarı yazın.');
+    }
+
+    try {
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [hedefTelegramId]);
+        if (userCheck.rows.length === 0) {
+            return ctx.reply('❌ Bu Telegram ID\'ye sahip bir kullanıcı veritabanında bulunamadı.');
+        }
+
+        const userId = userCheck.rows[0].id;
+        const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        if (walletCheck.rows.length === 0) {
+            return ctx.reply('❌ Kullanıcının cüzdan kaydı bulunamadı.');
+        }
+
+        await db.query('UPDATE chip_wallets SET available_balance = GREATEST(available_balance - $1, 0) WHERE user_id = $2', [silinecekCip, userId]);
+
+        const finalWallet = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const yeniBakiye = finalWallet.rows[0].available_balance;
+
+        await ctx.reply(`🗑️ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li hesaptan *${silinecekCip} Çip* silindi.\n🪙 Güncel Kalan Bakiye: *${yeniBakiye} Çip*`, { parse_mode: 'Markdown' });
+        bot.telegram.sendMessage(hedefTelegramId, `⚠️ Hesabınızdan yönetici tarafından **${silinecekCip} Çip** silindi. Güncel bakiyeniz: ${yeniBakiye} Çip.`, { parse_mode: 'Markdown' }).catch(() => {});
+    } catch (error) {
+        await ctx.reply('❌ Veritabanından çip silinirken bir hata oluştu.');
+    }
+});
+
 bot.command('ban', async (ctx) => {
-    if (ctx.from.id.toString() !== PATRON_ID)
-        return;
+    if (ctx.from.id.toString() !== PATRON_ID) return;
     const parts = ctx.message.text.split(' ');
-    if (parts.length !== 2)
-        return ctx.reply('❌ Kullanım: /ban 123456789');
+    if (parts.length !== 2) return ctx.reply('❌ Kullanım: /ban 123456789');
+    
     try {
         await db.query('UPDATE users SET is_banned = true WHERE telegram_user_id = $1', [parts[1]]);
         ctx.reply(`🔨 ${parts[1]} SİSTEMDEN BANLANDI!`);
-    }
-    catch (e) { }
+    } catch (e) {}
 });
-bot.command('cipekle', async (ctx) => {
-    if (ctx.from.id.toString() !== PATRON_ID)
-        return;
-    const mesajParcalari = ctx.message.text.split(' ');
-    if (mesajParcalari.length !== 3)
-        return ctx.reply('❌ Doğrusu: /cipekle 123456789 50');
+
+bot.command('gruptancikar', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return;
+    const parts = ctx.message.text.split(' ');
+    if (parts.length !== 2) return ctx.reply('❌ Kullanım: `/gruptancikar <Kullanici_ID>`', { parse_mode: 'Markdown' });
+    
+    const hedefId = parts[1].trim();
+
     try {
-        const targetUser = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [mesajParcalari[1]]);
-        if (targetUser.rows.length === 0)
-            return ctx.reply('❌ Bu ID bulunamadı.');
-        await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [parseInt(mesajParcalari[2]), targetUser.rows[0].id]);
-        ctx.reply(`✅ Başarılı! Çip eklendi.`);
-        bot.telegram.sendMessage(mesajParcalari[1], `🎁 MÜJDE! Hesabınıza ${mesajParcalari[2]} Çip eklendi!`).catch(() => { });
+        await bot.telegram.banChatMember(GRUP_ID, hedefId);
+        await bot.telegram.unbanChatMember(GRUP_ID, hedefId).catch(()=>{});
+        await db.query('UPDATE users SET is_banned = true WHERE telegram_user_id = $1', [hedefId]).catch(()=>{});
+
+        ctx.reply(`✅ \`${hedefId}\` ID'li kullanıcı gruptan ve sistemden başarıyla çıkarıldı!`, { parse_mode: 'Markdown' });
+    } catch (e) {
+        ctx.reply('❌ Kullanıcı gruptan çıkarılamadı.');
     }
-    catch (error) { }
 });
-bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
+
+bot.command('grubukapat', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return;
+    try {
+        await bot.telegram.setChatPermissions(GRUP_ID, {
+            can_send_messages: false,
+            can_send_media_messages: false,
+            can_send_polls: false,
+            can_send_other_messages: false,
+            can_add_web_page_previews: false,
+            can_change_info: false,
+            can_invite_users: true,
+            can_pin_messages: false
+        });
+        ctx.reply('🔒 Grup başarıyla kapatıldı! Artık sadece yöneticiler mesaj yazabilir.');
+    } catch (e) {
+        ctx.reply('❌ Grup izinleri değiştirilemedi.');
+    }
+});
+
+bot.command('grubuac', async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return;
+    try {
+        await bot.telegram.setChatPermissions(GRUP_ID, {
+            can_send_messages: true,
+            can_send_media_messages: true,
+            can_send_polls: true,
+            can_send_other_messages: true,
+            can_add_web_page_previews: true,
+            can_change_info: false,
+            can_invite_users: true,
+            can_pin_messages: false
+        });
+        ctx.reply('🔓 Grup açıldı! Artık herkes mesaj yazabilir.');
+    } catch (e) {
+        ctx.reply('❌ Grup izinleri değiştirilemedi.');
+    }
+});
+
+// ==========================================
+// 💰 BAKIYE ÇEKİM TALEBİ TETİKLEYİCİSİ (SADECE SATICILAR)
+// ==========================================
+const bakiyeCekIslemiBaslat = async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
+    delete geciciVeri[ctx.from.id];
     try {
         const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
-        if (userCheck.rows.length === 0)
-            return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
+        if (userCheck.rows.length === 0) return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
+        
         const userId = userCheck.rows[0].id;
-        const wallet = await db.query('SELECT available_balance, last_reward_date, reward_week_start, reward_weekly_count FROM chip_wallets WHERE user_id = $1', [userId]);
+        const sellerCheck = await db.query('SELECT * FROM seller_profiles WHERE user_id = $1', [userId]);
+        
+        if (sellerCheck.rows.length === 0) {
+            return ctx.reply('❌ Bu özellik yalnızca **Kayıtlı Satıcılar** içindir!\n\nMağaza açmak ve bakiye çekebilmek için menüden **"🏪 İlan Ver"** butonuna basarak mağazanızı oluşturabilirsiniz.', anaMenu);
+        }
+
+        const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const mevcutBakiye = walletCheck.rows[0] ? walletCheck.rows[0].available_balance : 0;
+
+        sohbetHafizasi[ctx.from.id] = 'CEKIM_CHIP_BEKLENIYOR';
+        geciciVeri[ctx.from.id] = {};
+        
+        await ctx.reply(
+            `💸 **Bakiye Çekim Talebi**\n\n` +
+            `🪙 **Mevcut Bakiyeniz:** *${mevcutBakiye} Çip*\n\n` +
+            `Çekmek istediğiniz **Çip** miktarını yazın (Minimum 20.000 Çip):`,
+            { parse_mode: 'Markdown', ...anaMenu }
+        );
+    } catch (e) {
+        ctx.reply('❌ Bir hata oluştu.', anaMenu);
+    }
+};
+
+bot.hears(['💰 Bakiye Çek', 'Bakiye Çek'], bakiyeCekIslemiBaslat);
+bot.command('bakiyecek', bakiyeCekIslemiBaslat);
+
+// ==========================================
+// 💬 BUTON İŞLEYİCİLERİ
+// ==========================================
+bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
+    delete sohbetHafizasi[ctx.from.id];
+    delete geciciVeri[ctx.from.id];
+    await ctx.reply(`💬 **Yönetici ile İletişim**\n\nSoru, öneri, sorun bildirimleri veya ödeme bildirimleri (dekont) için aşağıdaki butonu kullanarak doğrudan yöneticiye ulaşabilirsin:`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            Markup.button.url('💬 Admin\'e Mesaj Gönder', `tg://user?id=${PATRON_ID}`)
+        ])
+    });
+});
+
+// 🟢 ÇİP FİYAT POLİTİKASI (Belirgin renkli kod bloklu fiyatlar ve yükle butonları)
+bot.hears(['📊 Çip Fiyat Politikası', 'Çip Fiyat Politikası'], async (ctx) => {
+    delete sohbetHafizasi[ctx.from.id];
+    delete geciciVeri[ctx.from.id];
+    
+    const telegramId = ctx.from.id;
+    let bakiye = 0;
+
+    try {
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
+        if (userCheck.rows.length > 0) {
+            const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userCheck.rows[0].id]);
+            if (walletCheck.rows.length > 0) {
+                bakiye = walletCheck.rows[0].available_balance;
+            }
+        }
+    } catch (e) {}
+
+    await ctx.reply(
+        `📊 **ÇİP FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
+        `🪙 **Kullanılabilir Bakiyeniz:** \`${bakiye} Çip\`\n\n` +
+        `• 250 Çip ➔ \`110 ₺\`\n` +
+        `• 1.000 Çip ➔ \`375 ₺\`\n` +
+        `• 2.500 Çip ➔ \`875 ₺\`\n` +
+        `• 5.000 Çip ➔ \`1.650 ₺\`\n\n` +
+        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('💳 250 Çip Yükle (110 ₺)', 'paket_yukle_250_110')],
+                [Markup.button.callback('💳 1.000 Çip Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                [Markup.button.callback('💳 2.500 Çip Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                [Markup.button.callback('💳 5.000 Çip Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+            ])
+        }
+    );
+});
+
+// 🟢 PAKET YÜKLE: BİLGİLERİ TEK TEK AYRI MESAJLAR HALİNDE GÖNDERİR
+bot.action(/paket_yukle_(\d+)_(\d+)/, async (ctx) => {
+    const chipMiktari = ctx.match[1];
+    const tlFiyati = ctx.match[2];
+    const userId = ctx.from.id;
+
+    await ctx.answerCbQuery(`✅ ${chipMiktari} Çip paketi seçildi!`);
+
+    await ctx.reply(`💳 **Seçilen Paket:** \`${chipMiktari} Çip (${tlFiyati} ₺)\``, { parse_mode: 'Markdown' });
+    
+    await ctx.reply(`🏦 **IBAN Numarası:**`, { parse_mode: 'Markdown' });
+    await ctx.reply(`\`${PATRON_IBAN}\``, { parse_mode: 'Markdown' });
+
+    await ctx.reply(`👤 **Alıcı Ad Soyad:**`, { parse_mode: 'Markdown' });
+    await ctx.reply(`\`${PATRON_AD_SOYAD}\``, { parse_mode: 'Markdown' });
+
+    await ctx.reply(`✍️ **Açıklamaya Yazılacak ID Numarası:**`, { parse_mode: 'Markdown' });
+    await ctx.reply(`\`${userId}\``, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.url('💬 Dekontu Admin\'e Gönder', `tg://user?id=${PATRON_ID}`)]
+        ])
+    });
+});
+
+// 🟢 GÜNLÜK ÖDÜL
+bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
+    delete sohbetHafizasi[ctx.from.id];
+    delete geciciVeri[ctx.from.id];
+    try {
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
+        if (userCheck.rows.length === 0) return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
+        
+        const userId = userCheck.rows[0].id;
+        const wallet = await db.query('SELECT available_balance, last_reward_date, reward_week_start, reward_weekly_count, daily_spent_chips, last_spend_date FROM chip_wallets WHERE user_id = $1', [userId]);
+        
         const balance = wallet.rows[0].available_balance;
         const lastDate = wallet.rows[0].last_reward_date;
         let weekStart = wallet.rows[0].reward_week_start;
         let weeklyCount = wallet.rows[0].reward_weekly_count || 0;
+        const dailySpent = wallet.rows[0].daily_spent_chips || 0;
+        const lastSpendDate = wallet.rows[0].last_spend_date;
+        
         const bugun = new Date().toISOString().split('T')[0];
         const currentTime = new Date().getTime();
+
         if (weekStart) {
             const weekStartTime = new Date(weekStart).getTime();
             if ((currentTime - weekStartTime) / (1000 * 3600 * 24) >= 7) {
                 weekStart = bugun;
                 weeklyCount = 0;
             }
-        }
-        else {
+        } else {
             weekStart = bugun;
             weeklyCount = 0;
         }
-        if (weeklyCount >= 5)
-            return ctx.reply('⚠️ **Haftalık Bedava Sınırı Doldu!**', anaMenu);
-        if (lastDate === bugun)
-            return ctx.reply('⏳ **Bugünkü ödül hakkınızı kullandınız!**', anaMenu);
-        const odul = Math.floor(Math.random() * 3) + 2;
+
+        if (weeklyCount >= 5) return ctx.reply('⚠️ **Haftalık Bedava Sınırı Doldu!**', anaMenu);
+        if (lastDate === bugun) return ctx.reply('⏳ **Bugünkü ödül hakkınızı kullandınız!**', anaMenu);
+        
+        const isVipToday = (lastSpendDate === bugun && dailySpent >= 1500);
+        
+        let odul = 0;
+        let vipMesaj = "";
+        if (isVipToday) {
+            odul = Math.floor(Math.random() * 11) + 10;
+            vipMesaj = "\n👑 **VIP ALICI ÖDÜLÜ UYGULANDI!** (Bugün 1500+ çip harcadığın için)";
+        } else {
+            odul = Math.floor(Math.random() * 3) + 2;
+        }
+
         weeklyCount += 1;
+        
         await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1, last_reward_date = $2, reward_week_start = $3, reward_weekly_count = $4 WHERE user_id = $5', [odul, bugun, weekStart, weeklyCount, userId]);
-        ctx.reply(`🎁 **TEBRİKLER!** ${odul} Çip kazandın!\n🪙 Yeni Bakiyen: ${balance + odul} Çip`, anaMenu);
-    }
-    catch (e) { }
+        ctx.reply(`🎁 **TEBRİKLER!** ${odul} Çip kazandın!${vipMesaj}\n🪙 Yeni Bakiyen: ${balance + odul} Çip`, anaMenu);
+    } catch (e) {}
 });
-bot.hears(['💰 Bakiyem', 'Bakiyem'], async (ctx) => {
-    delete sohbetHafizasi[ctx.from.id];
-    try {
-        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
-        if (userCheck.rows.length > 0) {
-            const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userCheck.rows[0].id]);
-            const bakiye = walletCheck.rows[0].available_balance;
-            await ctx.reply(`🪙 Güncel Bakiyen: *${bakiye} Çip*\n\n🆔 Telegram ID'n: \`${ctx.from.id}\``, {
-                parse_mode: 'Markdown',
-                ...telegraf_1.Markup.inlineKeyboard([
-                    telegraf_1.Markup.button.callback('🏦 Havale/EFT ile Çip Satın Al', 'cip_satin_al')
-                ])
-            });
-        }
-        else {
-            ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
-        }
-    }
-    catch (error) { }
-});
-bot.action('cip_satin_al', async (ctx) => {
-    try {
-        await ctx.answerCbQuery();
-        await ctx.reply(`Lütfen aşağıdaki banka hesabına ödemenizi yapınız.\n\n⚠️ Ödeme yaparken açıklamaya **Telegram ID** numaranızı yazınız:`, { parse_mode: 'Markdown' });
-        await ctx.reply(`🏦 Banka IBAN:`, { parse_mode: 'Markdown' });
-        await ctx.reply(`\`${PATRON_IBAN}\``, { parse_mode: 'Markdown' });
-        await ctx.reply(`👤 Alıcı Ad Soyad:`, { parse_mode: 'Markdown' });
-        await ctx.reply(`\`${PATRON_AD_SOYAD}\``, { parse_mode: 'Markdown' });
-        await ctx.reply(`✍️ Açıklamaya Yazılacak ID:`, { parse_mode: 'Markdown' });
-        await ctx.reply(`\`${ctx.from.id}\``, { parse_mode: 'Markdown' });
-    }
-    catch (error) { }
-});
-// ℹ️ YARDIM BUTONU (YENİLENEN TALİMAT VE /START HATIRLATMASI İLE)
-bot.hears(['ℹ️ Yardım', 'Yardım'], async (ctx) => {
-    delete sohbetHafizasi[ctx.from.id];
-    await ctx.reply(`🤖 **Pazar Yeri Bilgilendirme ve Yardım**\n\n` +
-        `• Görsel satışlarından %10, Özel Mesaj erişimlerinden ise %85 komisyon kesilir.\n` +
-        `• Sohbet geçmişini sildiğinizde veya menü kaybolduğunda dilediğiniz an **/start** yazarak menüyü ve kullanım kılavuzunu tekrar ekrana getirebilirsiniz.\n\n` +
-        `Sorun yaşarsanız menüden işlemlerinizi güvenle yönetebilirsiniz.`, { parse_mode: 'Markdown', ...anaMenu });
-});
+
 bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
+    delete geciciVeri[ctx.from.id];
     try {
         const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
-        if (userCheck.rows.length === 0)
-            return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
+        if (userCheck.rows.length === 0) return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
+        
         const sellerCheck = await db.query('SELECT * FROM seller_profiles WHERE user_id = $1', [userCheck.rows[0].id]);
         if (sellerCheck.rows.length > 0) {
             sohbetHafizasi[ctx.from.id] = 'URUN_ISMI_BEKLENIYOR';
             geciciVeri[ctx.from.id] = {};
-            ctx.reply('Lütfen ürünün Başlığını yaz:', telegraf_1.Markup.removeKeyboard());
-        }
-        else {
+            await db.query('INSERT INTO product_drafts (telegram_id, title, price, file_id) VALUES ($1, NULL, NULL, NULL) ON CONFLICT (telegram_id) DO UPDATE SET title = NULL, price = NULL, file_id = NULL', [ctx.from.id]);
+            ctx.reply('Lütfen ürünün Başlığını yaz:', anaMenu); 
+        } else {
             sohbetHafizasi[ctx.from.id] = 'MAGAZA_ISMI_BEKLENIYOR';
-            ctx.reply('İlan verebilmek için önce bir Mağaza Adı yazıp gönder:', telegraf_1.Markup.removeKeyboard());
+            geciciVeri[ctx.from.id] = {};
+            ctx.reply('İlan verebilmek için önce bir Mağaza Adı yazıp gönder:', anaMenu);
         }
-    }
-    catch (error) { }
+    } catch (error) {}
 });
-bot.hears(/(ödeme|havale|eft|dekont|yatırdım|gönderdim|attım|kontrol eder)/i, async (ctx) => {
-    if (sohbetHafizasi[ctx.from.id])
-        return;
-    await ctx.reply(`💳 **Ödeme Bildirimi Algılandı**\n\nDekontunuzu doğrudan yöneticiye ileterek çiplerinizi yükletebilirsiniz:`, {
-        parse_mode: 'Markdown',
-        ...telegraf_1.Markup.inlineKeyboard([
-            telegraf_1.Markup.button.url('💬 Admin\'e Dekont Gönder', `tg://user?id=${PATRON_ID}`)
-        ])
-    });
-});
+
+// ÜRÜN AÇMA (ÇİP ÖDENİNCE DİREKT MEVCUT MESAJIN GÖRSELİNİ NETLEŞTİRİR)
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
         const cost = parseInt(ctx.match[2]);
         const telegramId = ctx.from.id;
+
         const buyerCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
-        if (buyerCheck.rows.length === 0)
-            return ctx.answerCbQuery('❌ Önce /start yaz.', { show_alert: true });
+        if (buyerCheck.rows.length === 0) return ctx.answerCbQuery('❌ Önce /start yaz.', { show_alert: true });
+
         const buyerId = buyerCheck.rows[0].id;
-        const urunSorgu = await db.query(`
-            SELECT p.seller_id, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id 
-            FROM products p 
-            JOIN seller_profiles s ON p.seller_id = s.id 
-            JOIN users u ON s.user_id = u.id 
-            WHERE p.id = $1
-        `, [productId]);
-        if (urunSorgu.rows.length === 0)
-            return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
+        const urunSorgu = await db.query(`SELECT p.seller_id, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
+
+        if (urunSorgu.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
         const sellerInfo = urunSorgu.rows[0];
+
         if (telegramId.toString() === sellerInfo.seller_telegram_id.toString()) {
             return ctx.answerCbQuery('⚠️ Kendi ilanına çip harcayamazsın!', { show_alert: true });
         }
-        const buyerWallet = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [buyerId]);
+
+        const buyerWallet = await db.query('SELECT available_balance, daily_spent_chips, last_spend_date FROM chip_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
-        if (currentBalance < cost)
-            return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
-        const komisyon = Math.floor(cost * 0.10);
+
+        if (currentBalance < cost) return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
+
+        const bugun = new Date().toISOString().split('T')[0];
+        let currentDailySpent = buyerWallet.rows[0].daily_spent_chips || 0;
+        let lastSpendDate = buyerWallet.rows[0].last_spend_date;
+
+        if (lastSpendDate !== bugun) {
+            currentDailySpent = 0;
+            lastSpendDate = bugun;
+        }
+        currentDailySpent += cost;
+
+        const komisyon = Math.floor(cost * 0.10); 
         const saticiKazanci = cost - komisyon;
         const newBalance = currentBalance - cost;
-        await db.query('UPDATE chip_wallets SET available_balance = $1 WHERE user_id = $2', [newBalance, buyerId]);
+
+        await db.query('UPDATE chip_wallets SET available_balance = $1, daily_spent_chips = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerId]);
         await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
-        await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(() => { });
+        await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(()=>{});
+
         const photoCheck = await db.query('SELECT original_storage_key FROM product_images WHERE product_id = $1', [productId]);
         const ozelMesajBedeli = Math.ceil(cost * 1.5);
+
         ctx.answerCbQuery(`✅ Başarılı! ${cost} Çip harcandı.`, { show_alert: false });
-        await ctx.replyWithPhoto(photoCheck.rows[0].original_storage_key, {
-            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Çip\n🪙 Kalan Bakiyen: ${newBalance} Çip`,
-            reply_markup: { inline_keyboard: [[telegraf_1.Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Çip )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]] }
+        
+        let inlineButtons = [
+            [
+                Markup.button.callback('⭐ 1', `rate_${productId}_1`),
+                Markup.button.callback('⭐ 2', `rate_${productId}_2`),
+                Markup.button.callback('⭐ 3', `rate_${productId}_3`),
+                Markup.button.callback('⭐ 4', `rate_${productId}_4`),
+                Markup.button.callback('⭐ 5', `rate_${productId}_5`)
+            ]
+        ];
+
+        if (sellerInfo.is_messaging_enabled) {
+            inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Çip )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
+        }
+
+        await ctx.editMessageMedia({
+            type: 'photo',
+            media: photoCheck.rows[0].original_storage_key,
+            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Çip\n🪙 Kalan Bakiyen: ${newBalance} Çip\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`
+        }, {
+            reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
         });
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir müşteri görselinizi açtı!\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!`).catch(() => { });
+
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir müşteri görselinizi açtı!\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!`).catch(() => {});
+    } catch (error) {
+        console.error(error);
+        ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
     }
-    catch (error) { }
 });
+
+// YILDIZ VERME 
+bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
+    try {
+        const productId = ctx.match[1];
+        const rating = parseInt(ctx.match[2]);
+        const telegramId = ctx.from.id;
+
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
+        if (userCheck.rows.length === 0) return ctx.answerCbQuery('❌ Hata.', { show_alert: true });
+        const buyerId = userCheck.rows[0].id;
+
+        const prodCheck = await db.query('SELECT seller_id, unlock_cost_chips, is_messaging_enabled FROM products WHERE id = $1', [productId]);
+        if (prodCheck.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
+        const cost = prodCheck.rows[0].unlock_cost_chips || 50;
+        const ozelMesajBedeli = Math.ceil(cost * 1.5);
+        const isMessagingEnabled = prodCheck.rows[0].is_messaging_enabled;
+
+        const existingRating = await db.query('SELECT id FROM seller_ratings WHERE buyer_id = $1 AND product_id = $2', [buyerId, productId]);
+        if (existingRating.rows.length > 0) {
+            return ctx.answerCbQuery('⚠️ Bu ürün için zaten oy kullandınız!', { show_alert: true });
+        }
+
+        await db.query('INSERT INTO seller_ratings (seller_id, buyer_id, product_id, rating) VALUES ($1, $2, $3, $4)', [prodCheck.rows[0].seller_id, buyerId, productId, rating]);
+
+        await ctx.answerCbQuery(`✅ Teşekkürler! ${rating} yıldız verdiniz.`, { show_alert: true });
+        
+        let inlineKeys = [];
+        if (isMessagingEnabled) {
+            inlineKeys.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Çip )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
+        }
+
+        await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeys }).catch(() => {});
+        await ctx.reply(`⭐ Satıcıya **${rating} Yıldız** verdiniz. Geri bildiriminiz için teşekkürler!`);
+    } catch (e) {
+        await ctx.answerCbQuery('⚠️ Bu ürünü zaten oyladınız!', { show_alert: true });
+    }
+});
+
 bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
         const pmCost = parseInt(ctx.match[2]);
         const telegramId = ctx.from.id;
+
         const buyerCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
-        const buyerWallet = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [buyerCheck.rows[0].id]);
+        const buyerWallet = await db.query('SELECT available_balance, daily_spent_chips, last_spend_date FROM chip_wallets WHERE user_id = $1', [buyerCheck.rows[0].id]);
         const currentBalance = buyerWallet.rows[0].available_balance;
-        if (currentBalance < pmCost)
-            return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
-        const urunSorgu = await db.query(`SELECT p.seller_id, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
+
+        if (currentBalance < pmCost) return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
+
+        const bugun = new Date().toISOString().split('T')[0];
+        let currentDailySpent = buyerWallet.rows[0].daily_spent_chips || 0;
+        let lastSpendDate = buyerWallet.rows[0].last_spend_date;
+
+        if (lastSpendDate !== bugun) {
+            currentDailySpent = 0;
+            lastSpendDate = bugun;
+        }
+        currentDailySpent += pmCost;
+
+        const urunSorgu = await db.query(`SELECT p.seller_id, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
         const sellerInfo = urunSorgu.rows[0];
+
+        if (!sellerInfo.is_messaging_enabled) {
+            return ctx.answerCbQuery('⚠️ Bu satıcı mesajlaşmayı kapalı tutuyor!', { show_alert: true });
+        }
+
         if (telegramId.toString() === sellerInfo.seller_telegram_id.toString()) {
             return ctx.answerCbQuery('⚠️ Kendi ilanınız için özel mesaj açamazsınız!', { show_alert: true });
         }
-        const saticiKazanci = Math.floor(pmCost * 0.15);
-        const komisyon = pmCost - saticiKazanci;
+
+        const saticiKazanci = Math.floor(pmCost * 0.15); 
+        const komisyon = pmCost - saticiKazanci;        
         const newBalance = currentBalance - pmCost;
-        await db.query('UPDATE chip_wallets SET available_balance = $1 WHERE user_id = $2', [newBalance, buyerCheck.rows[0].id]);
+
+        await db.query('UPDATE chip_wallets SET available_balance = $1, daily_spent_chips = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerCheck.rows[0].id]);
         await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
-        await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(() => { });
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
+        await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(()=>{});
+
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
         await ctx.reply(`✅ **Ödeme Başarılı!**\n\n👉 [Satıcıya Özel Mesaj Gönder](tg://user?id=${sellerInfo.seller_telegram_id})\n\n🪙 Kalan: ${newBalance} Çip`, { parse_mode: 'Markdown' });
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `✉️ **YENİ ÖZEL MESAJ TALEBİ!**\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!\n👉 [Müşterinin Profiline Git](tg://user?id=${telegramId})`, { parse_mode: 'Markdown' }).catch(() => { });
-    }
-    catch (error) { }
+
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `✉️ **YENİ ÖZEL MESAJ TALEBİ!**\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!\n👉 [Müşterinin Profiline Git](tg://user?id=${telegramId})`, { parse_mode: 'Markdown' }).catch(() => {});
+    } catch (error) {}
 });
-bot.on('text', async (ctx) => {
-    const asama = sohbetHafizasi[ctx.from.id];
-    const mesaj = ctx.message.text;
-    const butonlar = ['🏪 İlan Ver', '💰 Bakiyem', '🎁 Günlük Ödül', 'ℹ️ Yardım', 'İlan Ver', 'Bakiyem', 'Günlük Ödül', 'Yardım'];
-    if (butonlar.includes(mesaj))
-        return;
-    if (asama === 'MAGAZA_ISMI_BEKLENIYOR') {
-        geciciVeri[ctx.from.id] = { isim: mesaj };
-        sohbetHafizasi[ctx.from.id] = 'MAGAZA_ACIKLAMASI_BEKLENIYOR';
-        ctx.reply('Açıklama yaz:');
-    }
-    else if (asama === 'MAGAZA_ACIKLAMASI_BEKLENIYOR') {
+
+// ==========================================
+// 🛡️ ADMIN ONAY VE RET BUTON İŞLEYİCİLERİ
+// ==========================================
+bot.action(/cek_onayla_(\d+)/, async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return ctx.answerCbQuery('Yetkiniz yok.', { show_alert: true });
+    const reqId = ctx.match[1];
+
+    try {
+        const reqQuery = await db.query('SELECT * FROM withdrawal_requests WHERE id = $1', [reqId]);
+        if (reqQuery.rows.length === 0) return ctx.answerCbQuery('Talep bulunamadı.', { show_alert: true });
+        
+        const req = reqQuery.rows[0];
+        if (req.status !== 'BEKLIYOR') {
+            return ctx.answerCbQuery(`Bu talep zaten ${req.status} durumunda!`, { show_alert: true });
+        }
+
+        await db.query('UPDATE withdrawal_requests SET status = $1 WHERE id = $2', ['ONAYLANDI', reqId]);
+
+        const userQuery = await db.query('SELECT telegram_user_id FROM users WHERE id = $1', [req.user_id]);
+        const sellerTelegramId = userQuery.rows[0].telegram_user_id;
+
+        await ctx.answerCbQuery('✅ Talep onaylandı!', { show_alert: true });
+        
         try {
+            await ctx.editMessageText(`✅ ÇEKİM TALEBİ ONAYLANDI (#${reqId})\n\n🪙 Çip: ${req.chips_amount}\n💵 TL: ${req.tl_amount} ₺\n🏦 IBAN: \`${req.iban}\`\n👤 ${req.full_name}`, { parse_mode: 'Markdown' });
+        } catch (e) {}
+
+        await bot.telegram.sendMessage(
+            sellerTelegramId,
+            `✅ **Bakiye Çekim Talebiniz Onaylandı!**\n\n🪙 ${req.chips_amount} Çip karşılığı **${req.tl_amount} ₺** tutarındaki ödemeniz belirttiğiniz IBAN adresine gönderilmiştir. Hayırlı olsun!`,
+            { parse_mode: 'Markdown' }
+        ).catch(()=>{});
+
+    } catch (e) {
+        await ctx.answerCbQuery('Hata oluştu.', { show_alert: true });
+    }
+});
+
+bot.action(/cek_reddet_(\d+)/, async (ctx) => {
+    if (ctx.from.id.toString() !== PATRON_ID) return ctx.answerCbQuery('Yetkiniz yok.', { show_alert: true });
+    const reqId = ctx.match[1];
+
+    try {
+        const reqQuery = await db.query('SELECT * FROM withdrawal_requests WHERE id = $1', [reqId]);
+        if (reqQuery.rows.length === 0) return ctx.answerCbQuery('Talep bulunamadı.', { show_alert: true });
+        
+        const req = reqQuery.rows[0];
+        if (req.status !== 'BEKLIYOR') {
+            return ctx.answerCbQuery(`Bu talep zaten ${req.status} durumunda!`, { show_alert: true });
+        }
+
+        await db.query('UPDATE withdrawal_requests SET status = $1 WHERE id = $2', ['REDDEDILDI', reqId]);
+        await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [req.chips_amount, req.user_id]);
+
+        const userQuery = await db.query('SELECT telegram_user_id FROM users WHERE id = $1', [req.user_id]);
+        const sellerTelegramId = userQuery.rows[0].telegram_user_id;
+
+        await ctx.answerCbQuery('❌ Talep reddedildi ve çipler iade edildi.', { show_alert: true });
+        
+        try {
+            await ctx.editMessageText(`❌ ÇEKİM TALEBİ REDDEDİLDİ VE İADE EDİLDİ (#${reqId})\n\n🪙 Çip: ${req.chips_amount}\n💵 TL: ${req.tl_amount} ₺`, { parse_mode: 'Markdown' });
+        } catch (e) {}
+
+        await bot.telegram.sendMessage(
+            sellerTelegramId,
+            `❌ **Bakiye Çekim Talebiniz Reddedildi!**\n\n${req.chips_amount} Çip tutarındaki çekim talebiniz reddedilmiş olup, çipleriniz cüzdanınıza iade edilmiştir.`,
+            { parse_mode: 'Markdown' }
+        ).catch(()=>{});
+
+    } catch (e) {
+        await ctx.answerCbQuery('Hata oluştu.', { show_alert: true });
+    }
+});
+
+// ==========================================
+// 📝 METİN VE ÇEKİM SİHİRBAZI YÖNETİCİSİ
+// ==========================================
+bot.on('text', async (ctx) => {
+    const mesaj = ctx.message.text;
+    const butonlar = ['🏪 İlan Ver', '🎁 Günlük Ödül', '💰 Bakiye Çek', '💬 Admin ile Görüş', '📊 Çip Fiyat Politikası', 'İlan Ver', 'Günlük Ödül', 'Bakiye Çek', 'Admin ile Görüş', 'Çip Fiyat Politikası'];
+    
+    // Geçmiş temizlendiğinde ve yazı yazıldığında tıklanabilir /start içeren kısa açıklama gönderir
+    if (!butonlar.includes(mesaj) && !sohbetHafizasi[ctx.from.id] && !mesaj.startsWith('/')) {
+        const username = ctx.from.username || ctx.from.first_name || 'Kullanıcı';
+        try {
+            const userCheck = await db.query('SELECT * FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
+            if (userCheck.rows.length === 0) {
+                const insertUser = await db.query('INSERT INTO users (telegram_user_id, username) VALUES ($1, $2) RETURNING id', [ctx.from.id, username]);
+                await db.query('INSERT INTO chip_wallets (user_id, available_balance) VALUES ($1, 100)', [insertUser.rows[0].id]);
+            }
+        } catch (e) {}
+        return await ctx.reply(`Menüyü açmak için tıkla: /start`, anaMenu);
+    }
+
+    if (butonlar.includes(mesaj)) return;
+
+    const asama = sohbetHafizasi[ctx.from.id];
+
+    if (asama === 'CEKIM_CHIP_BEKLENIYOR') {
+        const miktar = parseInt(mesaj);
+        if (isNaN(miktar) || miktar <= 0) return ctx.reply('❌ Lütfen geçerli bir çip miktarı yazın:');
+        
+        if (miktar < 20000) {
+            return ctx.reply('⚠️ Minimum çekim tutarı **20.000 Çip**dir! Lütfen 20.000 veya üzerinde bir çip miktarı yazın:');
+        }
+
+        try {
+            const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
+            const userId = userCheck.rows[0].id;
+            const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+            const bakiye = walletCheck.rows[0].available_balance;
+
+            if (bakiye < miktar) {
+                return ctx.reply(`❌ Yetersiz bakiye! Mevcut bakiyeniz: *${bakiye} Çip*. Daha düşük bir miktar girin:`, { parse_mode: 'Markdown' });
+            }
+
+            geciciVeri[ctx.from.id].cekilecek_chip = miktar;
+            sohbetHafizasi[ctx.from.id] = 'CEKIM_IBAN_BEKLENIYOR';
+            return ctx.reply('✅ Çip miktarı alındı.\n\nŞimdi paranın yatacağı **IBAN** adresinizi yazın (Örn: TR...):');
+        } catch (e) {
+            delete sohbetHafizasi[ctx.from.id];
+            delete geciciVeri[ctx.from.id];
+            return ctx.reply('❌ Bir hata oluştu.', anaMenu);
+        }
+    } 
+
+    if (asama === 'CEKIM_IBAN_BEKLENIYOR') {
+        const iban = mesaj.trim();
+        if (iban.length < 10) return ctx.reply('❌ Lütfen geçerli bir IBAN numarası girin:');
+
+        geciciVeri[ctx.from.id].iban = iban;
+        sohbetHafizasi[ctx.from.id] = 'CEKIM_ADSOYAD_BEKLENIYOR';
+        return ctx.reply('✅ IBAN alındı.\n\nSon olarak IBAN sahibinin **Ad Soyad** bilgisini yazın:');
+    }
+
+    if (asama === 'CEKIM_ADSOYAD_BEKLENIYOR') {
+        const adSoyad = mesaj.trim();
+        if (adSoyad.length < 3) return ctx.reply('❌ Lütfen geçerli bir Ad Soyad girin:');
+
+        const veri = geciciVeri[ctx.from.id];
+        const chipMiktari = veri.cekilecek_chip;
+        const iban = veri.iban;
+        const telegramId = ctx.from.id;
+
+        try {
+            const userCheck = await db.query('SELECT id, username FROM users WHERE telegram_user_id = $1', [telegramId]);
+            const userId = userCheck.rows[0].id;
+            const username = userCheck.rows[0].username || 'Kullanici';
+
+            const tlKarsiligi = (chipMiktari * 0.375).toFixed(2);
+
+            await db.query('UPDATE chip_wallets SET available_balance = available_balance - $1 WHERE user_id = $2', [chipMiktari, userId]);
+
+            const insertReq = await db.query(
+                'INSERT INTO withdrawal_requests (user_id, chips_amount, tl_amount, iban, full_name, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+                [userId, chipMiktari, tlKarsiligi, iban, adSoyad, 'BEKLIYOR']
+            );
+            const reqId = insertReq.rows[0].id;
+
+            delete sohbetHafizasi[ctx.from.id];
+            delete geciciVeri[ctx.from.id];
+
+            await ctx.reply(`🎉 **Çekim Talebiniz Başarıyla Alındı!**\n\n🪙 Çip Miktarı: **${chipMiktari} Çip**\n💵 TL Karşılığı: **${tlKarsiligi} ₺**\n🏦 IBAN: \`${iban}\`\n👤 Ad Soyad: ${adSoyad}\n\nİşleminiz incelendikten sonra ödemeniz IBAN'ınıza gönderilecektir.`, { parse_mode: 'Markdown', ...anaMenu });
+
+            await bot.telegram.sendMessage(
+                PATRON_ID,
+                `🔔 **YENİ BAKIYE ÇEKİM TALEBİ (#${reqId})**\n\n` +
+                `👤 Satıcı: @${username} (ID: \`${telegramId}\`)\n` +
+                `🪙 Talep Edilen Çip: **${chipMiktari} Çip**\n` +
+                `💵 Ödenecek Tutar: **${tlKarsiligi} ₺**\n` +
+                `🏦 IBAN: \`${iban}\`\n` +
+                `👤 Alıcı Ad Soyad: ${adSoyad}`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([
+                        [
+                            Markup.button.callback('✅ Onayla ve Ödendi İşaretle', `cek_onayla_${reqId}`),
+                            Markup.button.callback('❌ Reddet ve İade Et', `cek_reddet_${reqId}`)
+                        ]
+                    ])
+                }
+            ).catch(()=>{});
+
+        } catch (e) {
+            delete sohbetHafizasi[ctx.from.id];
+            delete geciciVeri[ctx.from.id];
+            return ctx.reply('❌ Talep oluşturulurken bir veritabanı hatası oluştu.', anaMenu);
+        }
+    }
+
+    if (asama === 'MAGAZA_ISMI_BEKLENIYOR') {
+        if (!geciciVeri[ctx.from.id]) geciciVeri[ctx.from.id] = {};
+        geciciVeri[ctx.from.id].isim = mesaj;
+        sohbetHafizasi[ctx.from.id] = 'MAGAZA_ACIKLAMASI_BEKLENIYOR';
+        return ctx.reply('Açıklama yaz:', anaMenu);
+    } 
+    
+    if (asama === 'MAGAZA_ACIKLAMASI_BEKLENIYOR') {
+        try {
+            if (!geciciVeri[ctx.from.id]) geciciVeri[ctx.from.id] = { isim: "Mağaza" };
             const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
             await db.query('INSERT INTO seller_profiles (user_id, store_name, description) VALUES ($1, $2, $3)', [userCheck.rows[0].id, geciciVeri[ctx.from.id].isim, mesaj]);
             delete sohbetHafizasi[ctx.from.id];
-            ctx.reply(`🎉 Mağazanız oluşturuldu. Yeni ilan verebilirsiniz!`, anaMenu);
-        }
-        catch (error) {
-            ctx.reply('❌ Mağaza oluşturulamadı.', anaMenu);
-        }
-    }
-    else if (asama === 'URUN_ISMI_BEKLENIYOR') {
-        geciciVeri[ctx.from.id].baslik = mesaj;
-        sohbetHafizasi[ctx.from.id] = 'URUN_FIYATI_BEKLENIYOR';
-        ctx.reply('✅ Başlık alındı.\n\nŞimdi bu ürünün açılması için Kaç Çip gerektiğini yaz:');
-    }
-    else if (asama === 'URUN_FIYATI_BEKLENIYOR') {
-        const fiyat = parseInt(mesaj);
-        if (isNaN(fiyat) || fiyat <= 0)
-            return ctx.reply('❌ Lütfen sadece rakam yazın:');
-        geciciVeri[ctx.from.id].fiyat = fiyat;
-        sohbetHafizasi[ctx.from.id] = 'URUN_FOTOGRAFI_BEKLENIYOR';
-        ctx.reply(`✅ Fiyat ${fiyat} Çip olarak belirlendi.\n\nŞimdi buraya anlık fotoğraf gönderin:`);
-    }
-    else {
-        if (asama === 'URUN_FOTOGRAFI_BEKLENIYOR') {
+            delete geciciVeri[ctx.from.id];
+            return ctx.reply(`🎉 Mağazanız kuruldu. Artık ilan verebilir ve bakiye çekebilirsiniz!`, anaMenu);
+        } catch (error) { 
             delete sohbetHafizasi[ctx.from.id];
-            await ctx.reply('⚠️ Bu görseli sadece siz görebilirsiniz. İlana aykırı görsel paylaşımı veya metin girişi olduğu için işlem iptal edilmiştir.', anaMenu);
-            return;
+            delete geciciVeri[ctx.from.id];
+            return ctx.reply('❌ Mağaza oluşturulamadı.', anaMenu); 
         }
-        const username = ctx.from.username || ctx.from.first_name || 'Kullanıcı';
-        await sendWelcomeOrHelp(ctx, username);
+    } 
+    
+    if (asama === 'URUN_ISMI_BEKLENIYOR') {
+        if (!geciciVeri[ctx.from.id]) geciciVeri[ctx.from.id] = {};
+        geciciVeri[ctx.from.id].baslik = mesaj;
+        await db.query('INSERT INTO product_drafts (telegram_id, title) VALUES ($1, $2) ON CONFLICT (telegram_id) DO UPDATE SET title = $2', [ctx.from.id, mesaj]);
+        sohbetHafizasi[ctx.from.id] = 'URUN_FIYATI_BEKLENIYOR'; 
+        return ctx.reply('✅ Başlık alındı.\n\nŞimdi bu ürünün açılması için Kaç Çip gerektiğini yaz (Minimum 50 Çip):', anaMenu);
+    } 
+    
+    if (asama === 'URUN_FIYATI_BEKLENIYOR') {
+        const fiyat = parseInt(mesaj);
+        if (isNaN(fiyat) || fiyat <= 0) return ctx.reply('❌ Lütfen sadece geçerli bir rakam yazın:');
+        
+        if (fiyat < 50) {
+            return ctx.reply('⚠️ Minimum 50 çip değerinde ilan açılabilir! Lütfen 50 veya üzerinde bir çip miktarı yazın:');
+        }
+
+        if (!geciciVeri[ctx.from.id]) geciciVeri[ctx.from.id] = {};
+        geciciVeri[ctx.from.id].fiyat = fiyat;
+        await db.query('UPDATE product_drafts SET price = $2 WHERE telegram_id = $1', [ctx.from.id, fiyat]);
+        sohbetHafizasi[ctx.from.id] = 'URUN_FOTOGRAFI_BEKLENIYOR';
+        return ctx.reply(`✅ Fiyat ${fiyat} Çip olarak belirlendi.\n\nŞimdi buraya anlık fotoğraf gönderin:`, anaMenu);
+    } 
+    
+    if (asama === 'URUN_FOTOGRAFI_BEKLENIYOR') {
+        delete sohbetHafizasi[ctx.from.id];
+        delete geciciVeri[ctx.from.id];
+        return ctx.reply('⚠️ **Bu görseli sadece siz görebilirsiniz. İşlem iptal edildi.**', anaMenu);
     }
 });
+
 bot.on('photo', async (ctx) => {
     const asama = sohbetHafizasi[ctx.from.id];
     if (asama !== 'URUN_FOTOGRAFI_BEKLENIYOR') {
-        await ctx.reply('⚠️ Bu görseli sadece siz görebilirsiniz. İlana aykırı görsel paylaşımı olduğu için işlem gerçekleştirilmedi.', anaMenu);
+        await ctx.reply('⚠️ Önce ilan adımlarını takip edin.', anaMenu);
         return;
     }
+
     try {
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-        const baslik = geciciVeri[ctx.from.id].baslik;
-        const fiyat = geciciVeri[ctx.from.id].fiyat;
-        const sellerTelegramId = ctx.from.id.toString();
+        await db.query('UPDATE product_drafts SET file_id = $2 WHERE telegram_id = $1', [ctx.from.id, fileId]);
+
+        const draftRes = await db.query('SELECT * FROM product_drafts WHERE telegram_id = $1', [ctx.from.id]);
+        const draft = draftRes.rows[0];
+        const fiyat = draft && draft.price ? draft.price : 50;
+
+        const ozelMesajBedeli = Math.ceil(fiyat * 1.5);
+
+        await ctx.reply(
+            `🔒 **İlan Mesajlaşma Ayarı**\n\nBu ilan için alıcıların sizinle özel mesajlaşabilmesini istiyor musunuz?`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback(`💬 Açık (${ozelMesajBedeli} Çip)`, 'ilan_ayar_acik')],
+                    [Markup.button.callback('🔒 Gizli (Mesajlaşma Kapalı)', 'ilan_ayar_gizli')]
+                ])
+            }
+        );
+    } catch (error) {
+         delete sohbetHafizasi[ctx.from.id];
+         delete geciciVeri[ctx.from.id];
+         ctx.reply(`❌ İşlem yapılamadı. Tekrar deneyin.`, anaMenu);
+    }
+});
+
+bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
+    try {
+        const tercih = ctx.match[1];
+        const isMessagingEnabled = (tercih === 'acik');
+        const telegramId = ctx.from.id;
+
+        const draftRes = await db.query('SELECT * FROM product_drafts WHERE telegram_id = $1', [telegramId]);
+        const draft = draftRes.rows[0];
+
+        const baslik = draft && draft.title ? draft.title : "Yeni İlan";
+        const fiyat = draft && draft.price ? draft.price : 50;
+        const fileId = draft && draft.file_id ? draft.file_id : null;
+
+        if (!fileId) {
+            return ctx.answerCbQuery('⚠️ Lütfen ilanın fotoğrafını tekrar gönderin.', { show_alert: true });
+        }
+
+        await ctx.answerCbQuery('✅ İlan işleniyor...');
+
         const fileLink = await ctx.telegram.getFileLink(fileId);
         const buffer = await new Promise((resolve, reject) => {
-            https_1.default.get(fileLink.href, (res) => {
-                if (res.statusCode !== 200)
-                    return reject(new Error('Dosya çekilemedi!'));
+            https.get(fileLink.href, (res) => {
+                if (res.statusCode !== 200) return reject(new Error('Dosya çekilemedi!'));
                 const chunks = [];
                 res.on('data', (chunk) => chunks.push(chunk));
                 res.on('end', () => resolve(Buffer.concat(chunks)));
             }).on('error', (err) => reject(err));
         });
-        const blurredBuffer = await (0, sharp_1.default)(buffer)
-            .rotate()
-            .jpeg({ quality: 80 })
-            .blur(30)
-            .toBuffer();
+
+        const blurredBuffer = await sharp(buffer).rotate().jpeg({ quality: 80 }).blur(30).toBuffer();
         const previewMsg = await ctx.replyWithPhoto({ source: blurredBuffer }, { caption: `⏳ İşleniyor...` });
         const blurredFileId = previewMsg.photo[previewMsg.photo.length - 1].file_id;
-        await ctx.telegram.deleteMessage(ctx.chat.id, previewMsg.message_id).catch(() => { });
-        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
+        
+        await ctx.telegram.deleteMessage(ctx.chat.id, previewMsg.message_id).catch(() => {});
+
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
         const sellerCheck = await db.query('SELECT * FROM seller_profiles WHERE user_id = $1', [userCheck.rows[0].id]);
         const satici = sellerCheck.rows[0];
-        const insertUrun = await db.query('INSERT INTO products (seller_id, title, unlock_cost_chips) VALUES ($1, $2, $3) RETURNING id', [satici.id, baslik, fiyat]);
+        
+        const insertUrun = await db.query(
+            'INSERT INTO products (seller_id, title, unlock_cost_chips, is_messaging_enabled) VALUES ($1, $2, $3, $4) RETURNING id',
+            [satici.id, baslik, fiyat, isMessagingEnabled]
+        );
         const urunId = insertUrun.rows[0].id;
+
         await db.query('INSERT INTO product_images (product_id, original_storage_key, preview_storage_key) VALUES ($1, $2, $3)', [urunId, fileId, blurredFileId]);
-        delete sohbetHafizasi[ctx.from.id];
-        const captionText = `🚨 YENİ GİZLİ ÜRÜN EKLENDİ!\n\n🏪 Mağaza: ${satici.store_name}\n📦 Ürün: ${baslik}\n🔒 Durum: GİZLİ\n🪙 Bedel: ${fiyat} Çip`;
-        const butonlar = telegraf_1.Markup.inlineKeyboard([telegraf_1.Markup.button.callback(`🔓 ${fiyat} Çipe Aç`, `urunu_ac_${urunId}_${fiyat}`)]);
-        ilanKuyrugu.push({ sellerTelegramId, blurredFileId, captionText, butonlar });
+        
+        await db.query('DELETE FROM product_drafts WHERE telegram_id = $1', [telegramId]);
+        delete sohbetHafizasi[telegramId];
+        delete geciciVeri[telegramId];
+        
+        const rozet = await getSellerBadge(satici.id);
+        const captionText = `🚨 YENİ GİZLİ ÜRÜN Eklendi!\n\n🏪 Mağaza: ${satici.store_name} ${rozet}\n📦 Ürün: ${baslik}\n🔒 Durum: GİZLİ\n🪙 Bedel: ${fiyat} Çip`;
+        const butonlar = Markup.inlineKeyboard([Markup.button.callback(`🔓 ${fiyat} Çipe Aç`, `urunu_ac_${urunId}_${fiyat}`)]);
+
+        ilanKuyrugu.push({ sellerTelegramId: telegramId.toString(), blurredFileId, captionText, butonlar });
         ilanKuyrugunuIsle();
-        await ctx.reply(`🎉 MÜTHİŞ! Ürünün sıraya eklendi.`, anaMenu);
-    }
-    catch (error) {
-        console.error("FOTOĞRAF HATASI:", error);
-        ctx.reply(`❌ İşlem yapılamadı. Tekrar deneyin.`, anaMenu);
+
+        await ctx.editMessageCaption({ caption: `🎉 İlanınız başarıyla oluşturuldu ve yayın sırasına eklendi!` }).catch(()=>{});
+        await ctx.reply(`🎉 İşlem tamamlandı!`, anaMenu);
+    } catch (error) {
+        console.error(error);
+        ctx.answerCbQuery('❌ İşlem yapılamadı. Tekrar deneyin.', { show_alert: true });
     }
 });
-bot.on(['document', 'video', 'audio', 'sticker'], async (ctx) => {
-    delete sohbetHafizasi[ctx.from.id];
-    await ctx.reply('⚠️ Bu görseli sadece siz görebilirsiniz. İlana aykırı uygunsuz dosya paylaşımı olduğu için işlem iptal edilmiştir.', anaMenu);
+
+bot.launch().then(async () => {
+    // Sol alttaki / menü butonu komutları
+    await bot.telegram.setMyCommands([
+        { command: 'start', description: 'Ana Menüyü Aç' },
+        { command: 'magazadi', description: 'Mağaza Adını Değiştir' },
+        { command: 'bakiyecek', description: 'Bakiye Çek' }
+    ]).catch(()=>{});
+    console.log('🤖 Bot aktif ve sol alt menü butonları ayarlandı!');
 });
-bot.launch().then(() => console.log('🤖 Bot tam sürümle aktif!'));
+
 app.listen(process.env.PORT || 3000, () => console.log('🌐 Sunucu çalışıyor.'));
 process.once('SIGINT', () => { bot.stop('SIGINT'); db.end(); });
 process.once('SIGTERM', () => { bot.stop('SIGTERM'); db.end(); });

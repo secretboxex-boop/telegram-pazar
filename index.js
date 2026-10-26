@@ -198,13 +198,11 @@ bot.command('admin', async (ctx) => {
 bot.command('urunsifirla', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return ctx.reply('❌ Bu komutu kullanmaya yetkin yok.');
     try {
-        await db.query('DELETE FROM product_images;');
-        await db.query('DELETE FROM seller_ratings;');
-        await db.query('DELETE FROM products;');
+        await db.query('TRUNCATE TABLE product_images, seller_ratings, products RESTART IDENTITY CASCADE;');
         await ctx.reply('✅ Başarılı! Veritabanındaki tüm ürünler, görseller ve değerlendirmeler tamamen silindi.', anaMenu);
     } catch (error) {
         console.error('Ürün sifirlama hatası:', error);
-        await ctx.reply('❌ Ürünler sıfırlanırken bir veritabanı hatası oluştu.');
+        await ctx.reply(`❌ Ürünler sıfırlanırken bir hata oluştu: ${error.message}`);
     }
 });
 

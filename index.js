@@ -14,6 +14,11 @@ if (!token) throw new Error('BOT_TOKEN bulunamadı!');
 const bot = new Telegraf(token);
 const app = express();
 
+// 🟢 UptimeRobot ve tarayıcı istekleri için kök dizin yanıtı (404 hatasını önler, sistemi yeşil tutar)
+app.get('/', (req, res) => {
+    res.send('Sunucu aktif ve çalışıyor.');
+});
+
 const db = new Client({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -266,7 +271,7 @@ bot.command('duyuru', async (ctx) => {
             }
         }
 
-        await ctx.reply(`✅ Duyuru başarıyla tamamlandı!\n\n- Başarılı Özel Gönderim: ${successCount}\n- Başarısız (Botu engelleyenler): ${failCount}`);
+        await ctx.reply(`✅ Duyuru başarıyla tamamlandı!\n\nBaşarılı Özel Gönderim: ${successCount}\nBaşarısız (Botu engelleyenler): ${failCount}`);
     } catch (err) {
         console.error('Duyuru hatası:', err);
         await ctx.reply('❌ Duyuru gönderilirken bir veritabanı hatası oluştu.');

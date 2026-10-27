@@ -738,7 +738,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
         });
 
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir müşteri görselinizi açtı!\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!`).catch(() => {});
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!`).catch(() => {});
     } catch (error) {
         console.error(error);
         ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });

@@ -162,9 +162,10 @@ async function ilanKuyrugunuIsle() {
     kuyrukİsleniyor = false;
 }
 
+// Ana menü butonu "🪙 Jeton Ekle" olarak güncellendi
 const anaMenu = Markup.keyboard([
     ['🏪 İlan Ver', '🎁 Günlük Ödül'],
-    ['💰 Bakiye Çek', '📊 Jeton Fiyat Politikası'],
+    ['💰 Bakiye Çek', '🪙 Jeton Ekle'],
     ['💬 Admin ile Görüş']
 ]).resize();
 
@@ -192,7 +193,7 @@ async function sendWelcomeOrHelp(ctx, username) {
         `1️⃣ **İlan Ver:** Kendi mağazanı kurup gizli görseller paylaşabilir ve jeton kazanabilirsin.\n` +
         `2️⃣ **Jeton Harca / İçerik Aç:** Vitrine düşen bulanık görselleri jetonlarını kullanarak açabilirsin.\n` +
         `3️⃣ **Günlük Ödül:** Her gün menüden günlük ödülünü alarak ücretsiz jeton toplayabilirsin.\n` +
-        `4️⃣ **Jeton Fiyat Politikası:** Jeton paketlerini, kullanılabilir bakiyeni inceleyebilir ve havale/EFT ile bakiye yükleyebilirsin.\n\n` +
+        `4️⃣ **Jeton Ekle:** Jeton paketlerini inceleyebilir, kullanılabilir bakiyeni görebilir ve havale/EFT ile bakiye yükleyebilirsin.\n\n` +
         `Aşağıdaki menüyü dilediğin gibi kullanabilirsin! 🚀`,
         { parse_mode: 'Markdown', ...anaMenu }
     );
@@ -365,14 +366,14 @@ bot.command('jetonekle', async (ctx) => {
 
     const args = ctx.message.text.split(' ').slice(1);
     if (args.length !== 2) {
-        return ctx.reply('❌ Doğrusu:\n`/jetonekle 1572275874 5000`', { parse_mode: 'Markdown' });
+        return ctx.reply('❌ Doğru Kullanım:\n`/jetonekle <Kullanici_ID> <Miktar>`\nÖrnek: `/jetonekle 1572275874 5000`', { parse_mode: 'Markdown' });
     }
 
     const hedefTelegramId = args[0].trim();
     const eklenecekJeton = Number(args[1]);
 
     if (isNaN(eklenecekJeton) || eklenecekJeton <= 0) {
-        return ctx.reply('❌ Lütfen geçerli bir jeton miktarı yazın.');
+        return ctx.reply('❌ Lütfen geçerli bir çip/jeton miktarı yazın.');
     }
 
     try {
@@ -396,10 +397,12 @@ bot.command('jetonekle', async (ctx) => {
         const finalWallet = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userId]);
         const yeniBakiye = finalWallet.rows[0].available_balance;
 
-        await ctx.reply(`✅ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li kullanıcıya *${eklenecekJeton} Jeton* eklendi.\n🪙 Yeni Toplam Bakiye: *${yeniBakiye} Jeton*`, { parse_mode: 'Markdown' });
+        await ctx.reply(`✅ **İşlem Başarılı!**\n🆔 \`${hedefTelegramId}\` ID'li hesaba *${eklenecekJeton} Jeton* eklendi.\n🪙 Yeni Toplam Bakiye: *${yeniBakiye} Jeton*`, { parse_mode: 'Markdown' });
+        
         bot.telegram.sendMessage(hedefTelegramId, `🎉 Hesabınıza yönetici tarafından **${eklenecekJeton} Jeton** eklendi! Güncel bakiyeniz: ${yeniBakiye} Jeton.`, { parse_mode: 'Markdown' }).catch(() => {});
     } catch (error) {
-        await ctx.reply('❌ Veritabanında jeton eklenirken hata oluştu.');
+        console.error("jetonekle hatasi:", error);
+        await ctx.reply('❌ Veritabanında çip/jeton eklenirken bir hata oluştu.');
     }
 });
 
@@ -554,7 +557,8 @@ bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     });
 });
 
-bot.hears(['📊 Jeton Fiyat Politikası', 'Jeton Fiyat Politikası'], async (ctx) => {
+// "🪙 Jeton Ekle" menü butonu ve komutu
+bot.hears(['🪙 Jeton Ekle', 'Jeton Ekle'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
     
@@ -572,8 +576,8 @@ bot.hears(['📊 Jeton Fiyat Politikası', 'Jeton Fiyat Politikası'], async (ct
     } catch (e) {}
 
     await ctx.reply(
-        `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
-        `🪙 **Kullanılabilir Bakiyeniz:** \`${bakiye} Jeton\`\n\n` +
+        `🪙 **JETON EKLE VE PAKETLER**\n\n` +
+        `Kullanılabilir Bakiyeniz: \`${bakiye} Jeton\`\n\n` +
         `• 250 Jeton ➔ \`110 ₺\`\n` +
         `• 1.000 Jeton ➔ \`375 ₺\`\n` +
         `• 2.500 Jeton ➔ \`875 ₺\`\n` +
@@ -711,28 +715,21 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
+        // Jetonu yetersiz olduğunda istenen olumlu yönlendirme mesajı
         if (currentBalance < cost) {
-            await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
+            await ctx.answerCbQuery('🪙 Cüzdanında yeterli jeton bulunmuyor!', { show_alert: true });
             
             setTimeout(async () => {
                 try {
                     await bot.telegram.sendMessage(
                         telegramId,
-                        `⚠️ **Yetersiz Bakiye!**\n\n` +
-                        `Bu içeriği açabilmek için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
-                        `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
-                        `• 250 Jeton ➔ \`110 ₺\`\n` +
-                        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
-                        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
-                        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
-                        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+                        `✨ **Gizli görseli görebilmek için cüzdanına jeton eklemelisin!**\n\n` +
+                        `Bu içeriği açmak için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
+                        `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak cüzdanına jeton ekle ve gizli görselin tadını çıkar! 🚀`,
                         {
                             parse_mode: 'Markdown',
                             ...Markup.inlineKeyboard([
-                                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
-                                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                                [Markup.button.callback('🪙 Hemen Jeton Ekle / Paketleri Gör', 'menu_jeton_ekle')]
                             ])
                         }
                     );
@@ -784,16 +781,13 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
         }
 
-        // Medyayı güvenli bir şekilde güncelliyoruz
         await ctx.editMessageMedia({
             type: 'photo',
             media: orijinalFotoId,
             caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n🪙 Kalan Bakiyen: ${newBalance} Jeton\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`
         }, {
             reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
-        }).catch(async (editErr) => {
-            // Eğer editMessageMedia hata verirse alternatif olarak yeni fotoğraf gönderip eskisini siliyoruz
-            console.error("editMessageMedia hatasi, alternatif yontem deneniyor:", editErr);
+        }).catch(async () => {
             await ctx.replyWithPhoto(orijinalFotoId, {
                 caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n🪙 Kalan Bakiyen: ${newBalance} Jeton\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`,
                 ...Markup.inlineKeyboard(inlineButtons)
@@ -806,6 +800,42 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         console.error("urunu_ac hatasi detay:", error);
         await ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
     }
+});
+
+// Yetersiz bakiye mesajındaki butona tıklandığında paketleri açma
+bot.action('menu_jeton_ekle', async (ctx) => {
+    await ctx.answerCbQuery();
+    const telegramId = ctx.from.id;
+    let bakiye = 0;
+
+    try {
+        const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
+        if (userCheck.rows.length > 0) {
+            const walletCheck = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userCheck.rows[0].id]);
+            if (walletCheck.rows.length > 0) {
+                bakiye = walletCheck.rows[0].available_balance;
+            }
+        }
+    } catch (e) {}
+
+    await ctx.reply(
+        `🪙 **JETON EKLE VE PAKETLER**\n\n` +
+        `Kullanılabilir Bakiyeniz: \`${bakiye} Jeton\`\n\n` +
+        `• 250 Jeton ➔ \`110 ₺\`\n` +
+        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
+        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+            ])
+        }
+    );
 });
 
 bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
@@ -862,21 +892,13 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
                 try {
                     await bot.telegram.sendMessage(
                         telegramId,
-                        `⚠️ **Yetersiz Bakiye!**\n\n` +
-                        `Özel mesajlaşma başlatabilmek için **${pmCost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
-                        `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
-                        `• 250 Jeton ➔ \`110 ₺\`\n` +
-                        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
-                        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
-                        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
-                        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+                        `✨ **Özel mesajlaşma başlatabilmek için cüzdanına jeton eklemelisin!**\n\n` +
+                        `Gerekli: **${pmCost} Jeton**, Mevcut: \`${currentBalance} Jeton\`.\n\n` +
+                        `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak jeton yükle ve sohbete başla! 🚀`,
                         {
                             parse_mode: 'Markdown',
                             ...Markup.inlineKeyboard([
-                                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
-                                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                                [Markup.button.callback('🪙 Hemen Jeton Ekle / Paketleri Gör', 'menu_jeton_ekle')]
                             ])
                         }
                     );
@@ -995,7 +1017,7 @@ bot.action(/cek_reddet_(\d+)/, async (ctx) => {
 
 bot.on('text', async (ctx) => {
     const mesaj = ctx.message.text;
-    const butonlar = ['🏪 İlan Ver', '🎁 Günlük Ödül', '💰 Bakiye Çek', '💬 Admin ile Görüş', '📊 Jeton Fiyat Politikası', 'İlan Ver', 'Günlük Ödül', 'Bakiye Çek', 'Admin ile Görüş', 'Jeton Fiyat Politikası'];
+    const butonlar = ['🏪 İlan Ver', '🎁 Günlük Ödül', '💰 Bakiye Çek', '🪙 Jeton Ekle', '💬 Admin ile Görüş', 'İlan Ver', 'Günlük Ödül', 'Bakiye Çek', 'Jeton Ekle', 'Admin ile Görüş'];
     
     if (!butonlar.includes(mesaj) && !sohbetHafizasi[ctx.from.id] && !mesaj.startsWith('/')) {
         const username = ctx.from.username || ctx.from.first_name || 'Kullanıcı';

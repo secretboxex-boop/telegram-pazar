@@ -712,7 +712,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
 
         if (currentBalance < cost) {
             await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
-            return ctx.reply(
+            return await ctx.reply(
                 `⚠️ **Yetersiz Bakiye!**\n\n` +
                 `Bu içeriği açabilmek için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
                 `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
@@ -754,7 +754,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const photoCheck = await db.query('SELECT original_storage_key FROM product_images WHERE product_id = $1', [productId]);
         const ozelMesajBedeli = Math.ceil(cost * 1.5);
 
-        ctx.answerCbQuery(`✅ Başarılı! ${cost} Jeton harcandı.`, { show_alert: false });
+        await ctx.answerCbQuery(`✅ Başarılı! ${cost} Jeton harcandı.`, { show_alert: false });
         
         let inlineButtons = [
             [
@@ -780,8 +780,8 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
 
         bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
     } catch (error) {
-        console.error(error);
-        ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
+        console.error("urunu_ac hatasi:", error);
+        await ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
     }
 });
 
@@ -834,7 +834,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
 
         if (currentBalance < pmCost) {
             await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
-            return ctx.reply(
+            return await ctx.reply(
                 `⚠️ **Yetersiz Bakiye!**\n\n` +
                 `Özel mesajlaşma başlatabilmek için **${pmCost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
                 `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +

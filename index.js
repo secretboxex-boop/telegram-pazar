@@ -61,9 +61,6 @@ db.connect().then(async () => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS unlock_cost_jetons INT DEFAULT 50;
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS is_messaging_enabled BOOLEAN DEFAULT true;
-
         CREATE TABLE IF NOT EXISTS product_images (
             id SERIAL PRIMARY KEY,
             product_id INT REFERENCES products(id) ON DELETE CASCADE,
@@ -711,10 +708,8 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) {
-            // 1. Önce kullanıcıya pop-up olarak "Yetersiz çip" uyarısını veriyoruz
-            await ctx.answerCbQuery('❌ Yetersiz çip! Jeton politikası yönlendiriliyor...', { show_alert: true });
+            await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
             
-            // 2. 3 saniye (3000ms) bekleyip jeton fiyat politikasını ve paketlerini gönderiyoruz
             setTimeout(async () => {
                 try {
                     await bot.telegram.sendMessage(
@@ -788,7 +783,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
         });
 
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Một Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
     } catch (error) {
         console.error("urunu_ac hatasi:", error);
         await ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
@@ -843,7 +838,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery('❌ Yetersiz çip! Jeton politikası yönlendiriliyor...', { show_alert: true });
+            await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
             
             setTimeout(async () => {
                 try {
@@ -1233,7 +1228,7 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
         const captionText = `🚨 YENİ GİZLİ ÜRÜN Eklendi!\n\n🏪 Mağaza: ${satici.store_name} ${rozet}\n📦 Ürün: ${baslik}\n🔒 Durum: GİZLİ\n🪙 Bedel: ${fiyat} Jeton`;
         const butonlar = Markup.inlineKeyboard([Markup.button.callback(`🔓 ${fiyat} Jetona Aç`, `urunu_ac_${urunId}_${fiyat}`)]);
 
-        ilanKuyrugu.push({ sellerTelegramId: telegramId.toString(), blurredFileId, captionText, butonlar });
+ilanKuyrugu.push({ sellerTelegramId: telegramId.toString(), blurredFileId, captionText, butonlar });
         ilanKuyrugunuIsle();
 
         await ctx.editMessageCaption({ caption: `🎉 İlanınız başarıyla oluşturuldu ve yayın sırasına eklendi!` }).catch(()=>{});

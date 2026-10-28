@@ -712,7 +712,10 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
 
         if (currentBalance < cost) {
             await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
-            return await ctx.reply(
+            
+            // Callback query üzerinden doğrudan mesaj atmak yerine kullanıcıya yeni mesaj gönderiyoruz
+            await bot.telegram.sendMessage(
+                telegramId,
                 `⚠️ **Yetersiz Bakiye!**\n\n` +
                 `Bu içeriği açabilmek için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
                 `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
@@ -731,6 +734,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
                     ])
                 }
             );
+            return;
         }
 
         const bugun = new Date().toISOString().split('T')[0];
@@ -834,7 +838,9 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
 
         if (currentBalance < pmCost) {
             await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
-            return await ctx.reply(
+            
+            await bot.telegram.sendMessage(
+                telegramId,
                 `⚠️ **Yetersiz Bakiye!**\n\n` +
                 `Özel mesajlaşma başlatabilmek için **${pmCost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
                 `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
@@ -853,6 +859,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
                     ])
                 }
             );
+            return;
         }
 
         const bugun = new Date().toISOString().split('T')[0];

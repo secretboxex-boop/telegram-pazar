@@ -61,6 +61,9 @@ db.connect().then(async () => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS unlock_cost_jetons INT DEFAULT 50;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS is_messaging_enabled BOOLEAN DEFAULT true;
+
         CREATE TABLE IF NOT EXISTS product_images (
             id SERIAL PRIMARY KEY,
             product_id INT REFERENCES products(id) ON DELETE CASCADE,

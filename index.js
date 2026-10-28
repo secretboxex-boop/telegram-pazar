@@ -25,7 +25,6 @@ const db = new Client({
 });
 
 db.connect().then(async () => {
-    // Tüm tabloları eksiksiz ve ilişkileriyle birlikte sıfırdan oluşturan güvenli blok
     await db.query(`
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -35,14 +34,14 @@ db.connect().then(async () => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS chip_wallets (
+        CREATE TABLE IF NOT EXISTS jeton_wallets (
             id SERIAL PRIMARY KEY,
             user_id INT REFERENCES users(id) ON DELETE CASCADE,
             available_balance INT DEFAULT 0,
             last_reward_date VARCHAR(20) DEFAULT null,
             reward_week_start VARCHAR(20) DEFAULT null,
             reward_weekly_count INT DEFAULT 0,
-            daily_spent_chips INT DEFAULT 0,
+            daily_spent_jetons INT DEFAULT 0,
             last_spend_date VARCHAR(20) DEFAULT null
         );
 
@@ -58,7 +57,7 @@ db.connect().then(async () => {
             id SERIAL PRIMARY KEY,
             seller_id INT REFERENCES seller_profiles(id) ON DELETE CASCADE,
             title TEXT,
-            unlock_cost_chips INT DEFAULT 50,
+            unlock_cost_jetons INT DEFAULT 50,
             is_messaging_enabled BOOLEAN DEFAULT true,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -89,7 +88,7 @@ db.connect().then(async () => {
         CREATE TABLE IF NOT EXISTS withdrawal_requests (
             id SERIAL PRIMARY KEY,
             user_id INT REFERENCES users(id) ON DELETE CASCADE,
-            chips_amount INT,
+            jetons_amount INT,
             tl_amount DECIMAL(10,2),
             iban VARCHAR(100),
             full_name VARCHAR(150),
@@ -163,7 +162,7 @@ async function ilanKuyrugunuIsle() {
 
 const anaMenu = Markup.keyboard([
     ['🏪 İlan Ver', '🎁 Günlük Ödül'],
-    ['💰 Bakiye Çek', '📊 Çip Fiyat Politikası'],
+    ['💰 Bakiye Çek', '📊 Jeton Fiyat Politikası'],
     ['💬 Admin ile Görüş']
 ]).resize();
 
@@ -188,10 +187,10 @@ async function sendWelcomeOrHelp(ctx, username) {
     await ctx.reply(
         `🎉 **Özel Pazara Hoş Geldin, ${username}!**\n\n` +
         `📖 **Kullanım Talimatı:**\n` +
-        `1️⃣ **İlan Ver:** Kendi mağazanı kurup gizli görseller paylaşabilir ve çip kazanabilirsin.\n` +
-        `2️⃣ **Çip Harca / İçerik Aç:** Vitrine düşen bulanık görselleri çiplerini kullanarak açabilirsin.\n` +
-        `3️⃣ **Günlük Ödül:** Her gün menüden günlük ödülünü alarak ücretsiz çip toplayabilirsin.\n` +
-        `4️⃣ **Çip Fiyat Politikası:** Çip paketlerini, kullanılabilir bakiyeni inceleyebilir ve havale/EFT ile bakiye yükleyebilirsin.\n\n` +
+        `1️⃣ **İlan Ver:** Kendi mağazanı kurup gizli görseller paylaşabilir ve jeton kazanabilirsin.\n` +
+        `2️⃣ **Jeton Harca / İçerik Aç:** Vitrine düşen bulanık görselleri jetonlarını kullanarak açabilirsin.\n` +
+        `3️⃣ **Günlük Ödül:** Her gün menüden günlük ödülünü alarak ücretsiz jeton toplayabilirsin.\n` +
+        `4️⃣ **Jeton Fiyat Politikası:** Jeton paketlerini, kullanılabilir bakiyeni inceleyebilir ve havale/EFT ile bakiye yükleyebilirsin.\n\n` +
         `Aşağıdaki menüyü dilediğin gibi kullanabilirsin! 🚀`,
         { parse_mode: 'Markdown', ...anaMenu }
     );
@@ -207,7 +206,7 @@ const handleStart = async (ctx) => {
         const userCheck = await db.query('SELECT * FROM users WHERE telegram_user_id = $1', [telegramId]);
         if (userCheck.rows.length === 0) {
             const insertUser = await db.query('INSERT INTO users (telegram_user_id, username) VALUES ($1, $2) RETURNING id', [telegramId, username]);
-            await db.query('INSERT INTO chip_wallets (user_id, available_balance) VALUES ($1, $2)', [insertUser.rows[0].id, 100]);
+            await db.query('INSERT INTO jeton_wallets (user_id, available_balance) VALUES ($1, $2)', [insertUser.rows[0].id, 100]);
             await sendWelcomeOrHelp(ctx, username);
         } else {
             await ctx.reply(`👋 Tekrar hoş geldin ${username}! İşlemlerine menüden devam edebilirsin:`, anaMenu);
@@ -219,7 +218,7 @@ bot.start(handleStart);
 bot.command('start', handleStart);
 
 // ==========================================
-// 👑 YÖNETİCİ & ÇİP İŞLEMLERİ KOMUTLARI
+// 👑 YÖNETİCİ & JETON İŞLEMLERİ KOMUTLARI
 // ==========================================
 bot.command('admin', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return;
@@ -230,7 +229,7 @@ bot.command('admin', async (ctx) => {
         const vault = await db.query('SELECT total_profit FROM system_vault WHERE id = 1');
         const karlar = vault.rows[0] ? vault.rows[0].total_profit : 0;
         
-        ctx.reply(`👑 **VIP YÖNETİCİ PANELİ** 👑\n\n👥 Kullanıcı: ${usersCount.rows[0].count}\n🏪 Mağaza: ${sellersCount.rows[0].count}\n📦 Ürün: ${productsCount.rows[0].count}\n\n💎 **SİSTEMİN NET KÂRI: ${karlar} Çip**\n\n🚨 /ban <ID>\n🔨 /gruptancikar <ID>\n🔒 /grubukapat\n🔓 /grubuac\n💸 /cipekle <ID> <Miktar>\n🗑️ /cipsil <ID> <Miktar>\n🗑️ /urunsifirla (Tüm Ürünleri Siler)\n📢 /duyuru <Mesaj>\n🏪 /saticilar\n👥 /musteriler`);
+        ctx.reply(`👑 **VIP YÖNETİCİ PANELİ** 👑\n\n👥 Kullanıcı: ${usersCount.rows[0].count}\n🏪 Mağaza: ${sellersCount.rows[0].count}\n📦 Ürün: ${productsCount.rows[0].count}\n\n💎 **SİSTEMİN NET KÂRI: ${karlar} Jeton**\n\n🚨 /ban <ID>\n🔨 /gruptancikar <ID>\n🔒 /grubukapat\n🔓 /grubuac\n💸 /jetonekle <ID> <Miktar>\n🗑️ /jetonsil <ID> <Miktar>\n🗑️ /urunsifirla (Tüm Ürünleri Siler)\n📢 /duyuru <Mesaj>\n🏪 /saticilar\n👥 /musteriler`);
     } catch (e) {}
 });
 
@@ -320,7 +319,7 @@ bot.command('saticilar', async (ctx) => {
             SELECT s.id, s.store_name, u.telegram_user_id, w.available_balance 
             FROM seller_profiles s
             JOIN users u ON s.user_id = u.id
-            JOIN chip_wallets w ON u.id = w.user_id
+            JOIN jeton_wallets w ON u.id = w.user_id
             ORDER BY w.available_balance DESC LIMIT 20
         `);
 
@@ -330,7 +329,7 @@ bot.command('saticilar', async (ctx) => {
         for (let i = 0; i < saticilar.rows.length; i++) {
             const sat = saticilar.rows[i];
             const rozet = await getSellerBadge(sat.id);
-            mesaj += `${i + 1}. 🏪 ${sat.store_name} | 💰 ${sat.available_balance} Çip${rozet}\n(ID: \`${sat.telegram_user_id}\`)\n\n`;
+            mesaj += `${i + 1}. 🏪 ${sat.store_name} | 🪙 ${sat.available_balance} Jeton${rozet}\n(ID: \`${sat.telegram_user_id}\`)\n\n`;
         }
         ctx.reply(mesaj, { parse_mode: 'Markdown' });
     } catch (e) {
@@ -342,9 +341,9 @@ bot.command('musteriler', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return;
     try {
         const musteriler = await db.query(`
-            SELECT u.username, u.telegram_user_id, w.available_balance, w.daily_spent_chips, w.last_spend_date 
+            SELECT u.username, u.telegram_user_id, w.available_balance, w.daily_spent_jetons, w.last_spend_date 
             FROM users u
-            JOIN chip_wallets w ON u.id = w.user_id
+            JOIN jeton_wallets w ON u.id = w.user_id
             LEFT JOIN seller_profiles s ON u.id = s.user_id
             WHERE s.id IS NULL
             ORDER BY w.available_balance DESC LIMIT 20
@@ -356,9 +355,9 @@ bot.command('musteriler', async (ctx) => {
         let mesaj = `👥 **MÜŞTERİ CÜZDANLARI VE VIP DURUMU** 👥\n\n`;
         musteriler.rows.forEach((mus, index) => {
             const isim = mus.username || "İsimsiz";
-            const spent = (mus.last_spend_date === bugun) ? (mus.daily_spent_chips || 0) : 0;
+            const spent = (mus.last_spend_date === bugun) ? (mus.daily_spent_jetons || 0) : 0;
             const isVip = spent >= 1500 ? "👑 [VIP ALICI]" : "";
-            mesaj += `${index + 1}. 👤 ${isim} | 💰 ${mus.available_balance} Çip | Bugün Harcanan: ${spent} Çip ${isVip}\n(ID: \`${mus.telegram_user_id}\`)\n\n`;
+            mesaj += `${index + 1}. 👤 ${isim} | 🪙 ${mus.available_balance} Jeton | Bugün Harcanan: ${spent} Jeton ${isVip}\n(ID: \`${mus.telegram_user_id}\`)\n\n`;
         });
         ctx.reply(mesaj, { parse_mode: 'Markdown' });
     } catch (e) {
@@ -366,19 +365,19 @@ bot.command('musteriler', async (ctx) => {
     }
 });
 
-bot.command('cipekle', async (ctx) => {
+bot.command('jetonekle', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return;
 
     const args = ctx.message.text.split(' ').slice(1);
     if (args.length !== 2) {
-        return ctx.reply('❌ Doğrusu:\n`/cipekle 1572275874 5000`', { parse_mode: 'Markdown' });
+        return ctx.reply('❌ Doğrusu:\n`/jetonekle 1572275874 5000`', { parse_mode: 'Markdown' });
     }
 
     const hedefTelegramId = args[0].trim();
-    const eklenecekCip = Number(args[1]);
+    const eklenecekJeton = Number(args[1]);
 
-    if (isNaN(eklenecekCip) || eklenecekCip <= 0) {
-        return ctx.reply('❌ Lütfen geçerli bir çip miktarı yazın.');
+    if (isNaN(eklenecekJeton) || eklenecekJeton <= 0) {
+        return ctx.reply('❌ Lütfen geçerli bir jeton miktarı yazın.');
     }
 
     try {
@@ -392,36 +391,36 @@ bot.command('cipekle', async (ctx) => {
             userId = userCheck.rows[0].id;
         }
 
-        let walletCheck = await db.query('SELECT id FROM chip_wallets WHERE user_id = $1', [userId]);
+        let walletCheck = await db.query('SELECT id FROM jeton_wallets WHERE user_id = $1', [userId]);
         if (walletCheck.rows.length === 0) {
-            await db.query('INSERT INTO chip_wallets (user_id, available_balance) VALUES ($1, $2)', [userId, eklenecekCip]);
+            await db.query('INSERT INTO jeton_wallets (user_id, available_balance) VALUES ($1, $2)', [userId, eklenecekJeton]);
         } else {
-            await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [eklenecekCip, userId]);
+            await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [eklenecekJeton, userId]);
         }
 
-        const finalWallet = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const finalWallet = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userId]);
         const yeniBakiye = finalWallet.rows[0].available_balance;
 
-        await ctx.reply(`✅ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li kullanıcıya *${eklenecekCip} Çip* eklendi.\n🪙 Yeni Toplam Bakiye: *${yeniBakiye} Çip*`, { parse_mode: 'Markdown' });
-        bot.telegram.sendMessage(hedefTelegramId, `🎉 Hesabınıza yönetici tarafından **${eklenecekCip} Çip** eklendi! Güncel bakiyeniz: ${yeniBakiye} Çip.`, { parse_mode: 'Markdown' }).catch(() => {});
+        await ctx.reply(`✅ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li kullanıcıya *${eklenecekJeton} Jeton* eklendi.\n🪙 Yeni Toplam Bakiye: *${yeniBakiye} Jeton*`, { parse_mode: 'Markdown' });
+        bot.telegram.sendMessage(hedefTelegramId, `🎉 Hesabınıza yönetici tarafından **${eklenecekJeton} Jeton** eklendi! Güncel bakiyeniz: ${yeniBakiye} Jeton.`, { parse_mode: 'Markdown' }).catch(() => {});
     } catch (error) {
-        await ctx.reply('❌ Veritabanında çip eklenirken hata oluştu.');
+        await ctx.reply('❌ Veritabanında jeton eklenirken hata oluştu.');
     }
 });
 
-bot.command('cipsil', async (ctx) => {
+bot.command('jetonsil', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return;
 
     const args = ctx.message.text.split(' ').slice(1);
     if (args.length !== 2) {
-        return ctx.reply('❌ Doğru kullanım:\n`/cipsil 1572275874 100`', { parse_mode: 'Markdown' });
+        return ctx.reply('❌ Doğru kullanım:\n`/jetonsil 1572275874 100`', { parse_mode: 'Markdown' });
     }
 
     const hedefTelegramId = args[0].trim();
-    const silinecekCip = Number(args[1]);
+    const silinecekJeton = Number(args[1]);
 
-    if (isNaN(silinecekCip) || silinecekCip <= 0) {
-        return ctx.reply('❌ Lütfen geçerli bir çip miktarı yazın.');
+    if (isNaN(silinecekJeton) || silinecekJeton <= 0) {
+        return ctx.reply('❌ Lütfen geçerli bir jeton miktarı yazın.');
     }
 
     try {
@@ -431,20 +430,20 @@ bot.command('cipsil', async (ctx) => {
         }
 
         const userId = userCheck.rows[0].id;
-        const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const walletCheck = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userId]);
         if (walletCheck.rows.length === 0) {
             return ctx.reply('❌ Kullanıcının cüzdan kaydı bulunamadı.');
         }
 
-        await db.query('UPDATE chip_wallets SET available_balance = GREATEST(available_balance - $1, 0) WHERE user_id = $2', [silinecekCip, userId]);
+        await db.query('UPDATE jeton_wallets SET available_balance = GREATEST(available_balance - $1, 0) WHERE user_id = $2', [silinecekJeton, userId]);
 
-        const finalWallet = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const finalWallet = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userId]);
         const yeniBakiye = finalWallet.rows[0].available_balance;
 
-        await ctx.reply(`🗑️ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li hesaptan *${silinecekCip} Çip* silindi.\n🪙 Güncel Kalan Bakiye: *${yeniBakiye} Çip*`, { parse_mode: 'Markdown' });
-        bot.telegram.sendMessage(hedefTelegramId, `⚠️ Hesabınızdan yönetici tarafından **${silinecekCip} Çip** silindi. Güncel bakiyeniz: ${yeniBakiye} Çip.`, { parse_mode: 'Markdown' }).catch(() => {});
+        await ctx.reply(`🗑️ Başarılı!\n🆔 \`${hedefTelegramId}\` ID'li hesaptan *${silinecekJeton} Jeton* silindi.\n🪙 Güncel Kalan Bakiye: *${yeniBakiye} Jeton*`, { parse_mode: 'Markdown' });
+        bot.telegram.sendMessage(hedefTelegramId, `⚠️ Hesabınızdan yönetici tarafından **${silinecekJeton} Jeton** silindi. Güncel bakiyeniz: ${yeniBakiye} Jeton.`, { parse_mode: 'Markdown' }).catch(() => {});
     } catch (error) {
-        await ctx.reply('❌ Veritabanından çip silinirken bir hata oluştu.');
+        await ctx.reply('❌ Veritabanından jeton silinirken bir hata oluştu.');
     }
 });
 
@@ -532,16 +531,16 @@ const bakiyeCekIslemiBaslat = async (ctx) => {
             return ctx.reply('❌ Bu özellik yalnızca **Kayıtlı Satıcılar** içindir!\n\nMağaza açmak ve bakiye çekebilmek için menüden **"🏪 İlan Ver"** butonuna basarak mağazanızı oluşturabilirsiniz.', anaMenu);
         }
 
-        const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+        const walletCheck = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userId]);
         const mevcutBakiye = walletCheck.rows[0] ? walletCheck.rows[0].available_balance : 0;
 
-        sohbetHafizasi[ctx.from.id] = 'CEKIM_CHIP_BEKLENIYOR';
+        sohbetHafizasi[ctx.from.id] = 'CEKIM_JETON_BEKLENIYOR';
         geciciVeri[ctx.from.id] = {};
         
         await ctx.reply(
             `💸 **Bakiye Çekim Talebi**\n\n` +
-            `🪙 **Mevcut Bakiyeniz:** *${mevcutBakiye} Çip*\n\n` +
-            `Çekmek istediğiniz **Çip** miktarını yazın (Minimum 20.000 Çip):`,
+            `🪙 **Mevcut Bakiyeniz:** *${mevcutBakiye} Jeton*\n\n` +
+            `Çekmek istediğiniz **Jeton** miktarını yazın (Minimum 20.000 Jeton):`,
             { parse_mode: 'Markdown', ...anaMenu }
         );
     } catch (e) {
@@ -566,8 +565,8 @@ bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     });
 });
 
-// 🟢 ÇİP FİYAT POLİTİKASI (Belirgin renkli kod bloklu fiyatlar ve yükle butonları)
-bot.hears(['📊 Çip Fiyat Politikası', 'Çip Fiyat Politikası'], async (ctx) => {
+// 🟢 JETON FİYAT POLİTİKASI
+bot.hears(['📊 Jeton Fiyat Politikası', 'Jeton Fiyat Politikası'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
     
@@ -577,7 +576,7 @@ bot.hears(['📊 Çip Fiyat Politikası', 'Çip Fiyat Politikası'], async (ctx)
     try {
         const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
         if (userCheck.rows.length > 0) {
-            const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userCheck.rows[0].id]);
+            const walletCheck = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userCheck.rows[0].id]);
             if (walletCheck.rows.length > 0) {
                 bakiye = walletCheck.rows[0].available_balance;
             }
@@ -585,34 +584,34 @@ bot.hears(['📊 Çip Fiyat Politikası', 'Çip Fiyat Politikası'], async (ctx)
     } catch (e) {}
 
     await ctx.reply(
-        `📊 **ÇİP FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
-        `🪙 **Kullanılabilir Bakiyeniz:** \`${bakiye} Çip\`\n\n` +
-        `• 250 Çip ➔ \`110 ₺\`\n` +
-        `• 1.000 Çip ➔ \`375 ₺\`\n` +
-        `• 2.500 Çip ➔ \`875 ₺\`\n` +
-        `• 5.000 Çip ➔ \`1.650 ₺\`\n\n` +
+        `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
+        `🪙 **Kullanılabilir Bakiyeniz:** \`${bakiye} Jeton\`\n\n` +
+        `• 250 Jeton ➔ \`110 ₺\`\n` +
+        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
         `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 250 Çip Yükle (110 ₺)', 'paket_yukle_250_110')],
-                [Markup.button.callback('💳 1.000 Çip Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                [Markup.button.callback('💳 2.500 Çip Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                [Markup.button.callback('💳 5.000 Çip Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
             ])
         }
     );
 });
 
-// 🟢 PAKET YÜKLE: BİLGİLERİ TEK TEK AYRI MESAJLAR HALİNDE GÖNDERİR
+// 🟢 PAKET YÜKLE
 bot.action(/paket_yukle_(\d+)_(\d+)/, async (ctx) => {
-    const chipMiktari = ctx.match[1];
+    const jetonMiktari = ctx.match[1];
     const tlFiyati = ctx.match[2];
     const userId = ctx.from.id;
 
-    await ctx.answerCbQuery(`✅ ${chipMiktari} Çip paketi seçildi!`);
+    await ctx.answerCbQuery(`✅ ${jetonMiktari} Jeton paketi seçildi!`);
 
-    await ctx.reply(`💳 **Seçilen Paket:** \`${chipMiktari} Çip (${tlFiyati} ₺)\``, { parse_mode: 'Markdown' });
+    await ctx.reply(`💳 **Seçilen Paket:** \`${jetonMiktari} Jeton (${tlFiyati} ₺)\``, { parse_mode: 'Markdown' });
     
     await ctx.reply(`🏦 **IBAN Numarası:**`, { parse_mode: 'Markdown' });
     await ctx.reply(`\`${PATRON_IBAN}\``, { parse_mode: 'Markdown' });
@@ -638,13 +637,13 @@ bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
         if (userCheck.rows.length === 0) return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
         
         const userId = userCheck.rows[0].id;
-        const wallet = await db.query('SELECT available_balance, last_reward_date, reward_week_start, reward_weekly_count, daily_spent_chips, last_spend_date FROM chip_wallets WHERE user_id = $1', [userId]);
+        const wallet = await db.query('SELECT available_balance, last_reward_date, reward_week_start, reward_weekly_count, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [userId]);
         
         const balance = wallet.rows[0].available_balance;
         const lastDate = wallet.rows[0].last_reward_date;
         let weekStart = wallet.rows[0].reward_week_start;
         let weeklyCount = wallet.rows[0].reward_weekly_count || 0;
-        const dailySpent = wallet.rows[0].daily_spent_chips || 0;
+        const dailySpent = wallet.rows[0].daily_spent_jetons || 0;
         const lastSpendDate = wallet.rows[0].last_spend_date;
         
         const bugun = new Date().toISOString().split('T')[0];
@@ -670,15 +669,15 @@ bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
         let vipMesaj = "";
         if (isVipToday) {
             odul = Math.floor(Math.random() * 11) + 10;
-            vipMesaj = "\n👑 **VIP ALICI ÖDÜLÜ UYGULANDI!** (Bugün 1500+ çip harcadığın için)";
+            vipMesaj = "\n👑 **VIP ALICI ÖDÜLÜ UYGULANDI!** (Bugün 1500+ jeton harcadığın için)";
         } else {
             odul = Math.floor(Math.random() * 3) + 2;
         }
 
         weeklyCount += 1;
         
-        await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1, last_reward_date = $2, reward_week_start = $3, reward_weekly_count = $4 WHERE user_id = $5', [odul, bugun, weekStart, weeklyCount, userId]);
-        ctx.reply(`🎁 **TEBRİKLER!** ${odul} Çip kazandın!${vipMesaj}\n🪙 Yeni Bakiyen: ${balance + odul} Çip`, anaMenu);
+        await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1, last_reward_date = $2, reward_week_start = $3, reward_weekly_count = $4 WHERE user_id = $5', [odul, bugun, weekStart, weeklyCount, userId]);
+        ctx.reply(`🎁 **TEBRİKLER!** ${odul} Jeton kazandın!${vipMesaj}\n🪙 Yeni Bakiyen: ${balance + odul} Jeton`, anaMenu);
     } catch (e) {}
 });
 
@@ -703,7 +702,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// ÜRÜN AÇMA (ÇİP ÖDENİNCE DİREKT MEVCUT MESAJIN GÖRSELİNİ NETLEŞTİRİR)
+// ÜRÜN AÇMA
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -720,16 +719,16 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const sellerInfo = urunSorgu.rows[0];
 
         if (telegramId.toString() === sellerInfo.seller_telegram_id.toString()) {
-            return ctx.answerCbQuery('⚠️ Kendi ilanına çip harcayamazsın!', { show_alert: true });
+            return ctx.answerCbQuery('⚠️ Kendi ilanına jeton harcayamazsın!', { show_alert: true });
         }
 
-        const buyerWallet = await db.query('SELECT available_balance, daily_spent_chips, last_spend_date FROM chip_wallets WHERE user_id = $1', [buyerId]);
+        const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
 
         const bugun = new Date().toISOString().split('T')[0];
-        let currentDailySpent = buyerWallet.rows[0].daily_spent_chips || 0;
+        let currentDailySpent = buyerWallet.rows[0].daily_spent_jetons || 0;
         let lastSpendDate = buyerWallet.rows[0].last_spend_date;
 
         if (lastSpendDate !== bugun) {
@@ -742,14 +741,14 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const saticiKazanci = cost - komisyon;
         const newBalance = currentBalance - cost;
 
-        await db.query('UPDATE chip_wallets SET available_balance = $1, daily_spent_chips = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerId]);
-        await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
+        await db.query('UPDATE jeton_wallets SET available_balance = $1, daily_spent_jetons = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerId]);
+        await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
         await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(()=>{});
 
         const photoCheck = await db.query('SELECT original_storage_key FROM product_images WHERE product_id = $1', [productId]);
         const ozelMesajBedeli = Math.ceil(cost * 1.5);
 
-        ctx.answerCbQuery(`✅ Başarılı! ${cost} Çip harcandı.`, { show_alert: false });
+        ctx.answerCbQuery(`✅ Başarılı! ${cost} Jeton harcandı.`, { show_alert: false });
         
         let inlineButtons = [
             [
@@ -762,18 +761,18 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         ];
 
         if (sellerInfo.is_messaging_enabled) {
-            inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Çip )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
+            inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
         }
 
         await ctx.editMessageMedia({
             type: 'photo',
             media: photoCheck.rows[0].original_storage_key,
-            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Çip\n🪙 Kalan Bakiyen: ${newBalance} Çip\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`
+            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n🪙 Kalan Bakiyen: ${newBalance} Jeton\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`
         }, {
             reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
         });
 
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!`).catch(() => {});
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
     } catch (error) {
         console.error(error);
         ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
@@ -791,9 +790,9 @@ bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
         if (userCheck.rows.length === 0) return ctx.answerCbQuery('❌ Hata.', { show_alert: true });
         const buyerId = userCheck.rows[0].id;
 
-        const prodCheck = await db.query('SELECT seller_id, unlock_cost_chips, is_messaging_enabled FROM products WHERE id = $1', [productId]);
+        const prodCheck = await db.query('SELECT seller_id, unlock_cost_jetons, is_messaging_enabled FROM products WHERE id = $1', [productId]);
         if (prodCheck.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
-        const cost = prodCheck.rows[0].unlock_cost_chips || 50;
+        const cost = prodCheck.rows[0].unlock_cost_jetons || 50;
         const ozelMesajBedeli = Math.ceil(cost * 1.5);
         const isMessagingEnabled = prodCheck.rows[0].is_messaging_enabled;
 
@@ -808,7 +807,7 @@ bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
         
         let inlineKeys = [];
         if (isMessagingEnabled) {
-            inlineKeys.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Çip )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
+            inlineKeys.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
         }
 
         await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeys }).catch(() => {});
@@ -825,13 +824,13 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const telegramId = ctx.from.id;
 
         const buyerCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
-        const buyerWallet = await db.query('SELECT available_balance, daily_spent_chips, last_spend_date FROM chip_wallets WHERE user_id = $1', [buyerCheck.rows[0].id]);
+        const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerCheck.rows[0].id]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
 
         const bugun = new Date().toISOString().split('T')[0];
-        let currentDailySpent = buyerWallet.rows[0].daily_spent_chips || 0;
+        let currentDailySpent = buyerWallet.rows[0].daily_spent_jetons || 0;
         let lastSpendDate = buyerWallet.rows[0].last_spend_date;
 
         if (lastSpendDate !== bugun) {
@@ -855,14 +854,14 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const komisyon = pmCost - saticiKazanci;        
         const newBalance = currentBalance - pmCost;
 
-        await db.query('UPDATE chip_wallets SET available_balance = $1, daily_spent_chips = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerCheck.rows[0].id]);
-        await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
+        await db.query('UPDATE jeton_wallets SET available_balance = $1, daily_spent_jetons = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerCheck.rows[0].id]);
+        await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
         await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(()=>{});
 
         await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-        await ctx.reply(`✅ **Ödeme Başarılı!**\n\n👉 [Satıcıya Özel Mesaj Gönder](tg://user?id=${sellerInfo.seller_telegram_id})\n\n🪙 Kalan: ${newBalance} Çip`, { parse_mode: 'Markdown' });
+        await ctx.reply(`✅ **Ödeme Başarılı!**\n\n👉 [Satıcıya Özel Mesaj Gönder](tg://user?id=${sellerInfo.seller_telegram_id})\n\n🪙 Kalan: ${newBalance} Jeton`, { parse_mode: 'Markdown' });
 
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `✉️ **YENİ ÖZEL MESAJ TALEBİ!**\n💰 Net Kazancınız: ${saticiKazanci} Çip eklendi!\n👉 [Müşterinin Profiline Git](tg://user?id=${telegramId})`, { parse_mode: 'Markdown' }).catch(() => {});
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `✉️ **YENİ ÖZEL MESAJ TALEBİ!**\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!\n👉 [Müşterinin Profiline Git](tg://user?id=${telegramId})`, { parse_mode: 'Markdown' }).catch(() => {});
     } catch (error) {}
 });
 
@@ -890,12 +889,12 @@ bot.action(/cek_onayla_(\d+)/, async (ctx) => {
         await ctx.answerCbQuery('✅ Talep onaylandı!', { show_alert: true });
         
         try {
-            await ctx.editMessageText(`✅ ÇEKİM TALEBİ ONAYLANDI (#${reqId})\n\n🪙 Çip: ${req.chips_amount}\n💵 TL: ${req.tl_amount} ₺\n🏦 IBAN: \`${req.iban}\`\n👤 ${req.full_name}`, { parse_mode: 'Markdown' });
+            await ctx.editMessageText(`✅ ÇEKİM TALEBİ ONAYLANDI (#${reqId})\n\n🪙 Jeton: ${req.jetons_amount}\n💵 TL: ${req.tl_amount} ₺\n🏦 IBAN: \`${req.iban}\`\n👤 ${req.full_name}`, { parse_mode: 'Markdown' });
         } catch (e) {}
 
         await bot.telegram.sendMessage(
             sellerTelegramId,
-            `✅ **Bakiye Çekim Talebiniz Onaylandı!**\n\n🪙 ${req.chips_amount} Çip karşılığı **${req.tl_amount} ₺** tutarındaki ödemeniz belirttiğiniz IBAN adresine gönderilmiştir. Hayırlı olsun!`,
+            `✅ **Bakiye Çekim Talebiniz Onaylandı!**\n\n🪙 ${req.jetons_amount} Jeton karşılığı **${req.tl_amount} ₺** tutarındaki ödemeniz belirttiğiniz IBAN adresine gönderilmiştir. Hayırlı olsun!`,
             { parse_mode: 'Markdown' }
         ).catch(()=>{});
 
@@ -918,20 +917,20 @@ bot.action(/cek_reddet_(\d+)/, async (ctx) => {
         }
 
         await db.query('UPDATE withdrawal_requests SET status = $1 WHERE id = $2', ['REDDEDILDI', reqId]);
-        await db.query('UPDATE chip_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [req.chips_amount, req.user_id]);
+        await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [req.jetons_amount, req.user_id]);
 
         const userQuery = await db.query('SELECT telegram_user_id FROM users WHERE id = $1', [req.user_id]);
         const sellerTelegramId = userQuery.rows[0].telegram_user_id;
 
-        await ctx.answerCbQuery('❌ Talep reddedildi ve çipler iade edildi.', { show_alert: true });
+        await ctx.answerCbQuery('❌ Talep reddedildi ve jetonlar iade edildi.', { show_alert: true });
         
         try {
-            await ctx.editMessageText(`❌ ÇEKİM TALEBİ REDDEDİLDİ VE İADE EDİLDİ (#${reqId})\n\n🪙 Çip: ${req.chips_amount}\n💵 TL: ${req.tl_amount} ₺`, { parse_mode: 'Markdown' });
+            await ctx.editMessageText(`❌ ÇEKİM TALEBİ REDDEDİLDİ VE İADE EDİLDİ (#${reqId})\n\n🪙 Jeton: ${req.jetons_amount}\n💵 TL: ${req.tl_amount} ₺`, { parse_mode: 'Markdown' });
         } catch (e) {}
 
         await bot.telegram.sendMessage(
             sellerTelegramId,
-            `❌ **Bakiye Çekim Talebiniz Reddedildi!**\n\n${req.chips_amount} Çip tutarındaki çekim talebiniz reddedilmiş olup, çipleriniz cüzdanınıza iade edilmiştir.`,
+            `❌ **Bakiye Çekim Talebiniz Reddedildi!**\n\n${req.jetons_amount} Jeton tutarındaki çekim talebiniz reddedilmiş olup, jetonlarınız cüzdanınıza iade edilmiştir.`,
             { parse_mode: 'Markdown' }
         ).catch(()=>{});
 
@@ -945,16 +944,15 @@ bot.action(/cek_reddet_(\d+)/, async (ctx) => {
 // ==========================================
 bot.on('text', async (ctx) => {
     const mesaj = ctx.message.text;
-    const butonlar = ['🏪 İlan Ver', '🎁 Günlük Ödül', '💰 Bakiye Çek', '💬 Admin ile Görüş', '📊 Çip Fiyat Politikası', 'İlan Ver', 'Günlük Ödül', 'Bakiye Çek', 'Admin ile Görüş', 'Çip Fiyat Politikası'];
+    const butonlar = ['🏪 İlan Ver', '🎁 Günlük Ödül', '💰 Bakiye Çek', '💬 Admin ile Görüş', '📊 Jeton Fiyat Politikası', 'İlan Ver', 'Günlük Ödül', 'Bakiye Çek', 'Admin ile Görüş', 'Jeton Fiyat Politikası'];
     
-    // Geçmiş temizlendiğinde ve yazı yazıldığında tıklanabilir /start içeren kısa açıklama gönderir
     if (!butonlar.includes(mesaj) && !sohbetHafizasi[ctx.from.id] && !mesaj.startsWith('/')) {
         const username = ctx.from.username || ctx.from.first_name || 'Kullanıcı';
         try {
             const userCheck = await db.query('SELECT * FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
             if (userCheck.rows.length === 0) {
                 const insertUser = await db.query('INSERT INTO users (telegram_user_id, username) VALUES ($1, $2) RETURNING id', [ctx.from.id, username]);
-                await db.query('INSERT INTO chip_wallets (user_id, available_balance) VALUES ($1, 100)', [insertUser.rows[0].id]);
+                await db.query('INSERT INTO jeton_wallets (user_id, available_balance) VALUES ($1, 100)', [insertUser.rows[0].id]);
             }
         } catch (e) {}
         return await ctx.reply(`Menüyü açmak için tıkla: /start`, anaMenu);
@@ -964,27 +962,27 @@ bot.on('text', async (ctx) => {
 
     const asama = sohbetHafizasi[ctx.from.id];
 
-    if (asama === 'CEKIM_CHIP_BEKLENIYOR') {
+    if (asama === 'CEKIM_JETON_BEKLENIYOR') {
         const miktar = parseInt(mesaj);
-        if (isNaN(miktar) || miktar <= 0) return ctx.reply('❌ Lütfen geçerli bir çip miktarı yazın:');
+        if (isNaN(miktar) || miktar <= 0) return ctx.reply('❌ Lütfen geçerli bir jeton miktarı yazın:');
         
         if (miktar < 20000) {
-            return ctx.reply('⚠️ Minimum çekim tutarı **20.000 Çip**dir! Lütfen 20.000 veya üzerinde bir çip miktarı yazın:');
+            return ctx.reply('⚠️ Minimum çekim tutarı **20.000 Jeton**dir! Lütfen 20.000 veya üzerinde bir jeton miktarı yazın:');
         }
 
         try {
             const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
             const userId = userCheck.rows[0].id;
-            const walletCheck = await db.query('SELECT available_balance FROM chip_wallets WHERE user_id = $1', [userId]);
+            const walletCheck = await db.query('SELECT available_balance FROM jeton_wallets WHERE user_id = $1', [userId]);
             const bakiye = walletCheck.rows[0].available_balance;
 
             if (bakiye < miktar) {
-                return ctx.reply(`❌ Yetersiz bakiye! Mevcut bakiyeniz: *${bakiye} Çip*. Daha düşük bir miktar girin:`, { parse_mode: 'Markdown' });
+                return ctx.reply(`❌ Yetersiz bakiye! Mevcut bakiyeniz: *${bakiye} Jeton*. Daha düşük bir miktar girin:`, { parse_mode: 'Markdown' });
             }
 
-            geciciVeri[ctx.from.id].cekilecek_chip = miktar;
+            geciciVeri[ctx.from.id].cekilecek_jeton = miktar;
             sohbetHafizasi[ctx.from.id] = 'CEKIM_IBAN_BEKLENIYOR';
-            return ctx.reply('✅ Çip miktarı alındı.\n\nŞimdi paranın yatacağı **IBAN** adresinizi yazın (Örn: TR...):');
+            return ctx.reply('✅ Jeton miktarı alındı.\n\nŞimdi paranın yatacağı **IBAN** adresinizi yazın (Örn: TR...):');
         } catch (e) {
             delete sohbetHafizasi[ctx.from.id];
             delete geciciVeri[ctx.from.id];
@@ -1006,7 +1004,7 @@ bot.on('text', async (ctx) => {
         if (adSoyad.length < 3) return ctx.reply('❌ Lütfen geçerli bir Ad Soyad girin:');
 
         const veri = geciciVeri[ctx.from.id];
-        const chipMiktari = veri.cekilecek_chip;
+        const jetonMiktari = veri.cekilecek_jeton;
         const iban = veri.iban;
         const telegramId = ctx.from.id;
 
@@ -1015,26 +1013,26 @@ bot.on('text', async (ctx) => {
             const userId = userCheck.rows[0].id;
             const username = userCheck.rows[0].username || 'Kullanici';
 
-            const tlKarsiligi = (chipMiktari * 0.375).toFixed(2);
+            const tlKarsiligi = (jetonMiktari * 0.375).toFixed(2);
 
-            await db.query('UPDATE chip_wallets SET available_balance = available_balance - $1 WHERE user_id = $2', [chipMiktari, userId]);
+            await db.query('UPDATE jeton_wallets SET available_balance = available_balance - $1 WHERE user_id = $2', [jetonMiktari, userId]);
 
             const insertReq = await db.query(
-                'INSERT INTO withdrawal_requests (user_id, chips_amount, tl_amount, iban, full_name, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-                [userId, chipMiktari, tlKarsiligi, iban, adSoyad, 'BEKLIYOR']
+                'INSERT INTO withdrawal_requests (user_id, jetons_amount, tl_amount, iban, full_name, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+                [userId, jetonMiktari, tlKarsiligi, iban, adSoyad, 'BEKLIYOR']
             );
             const reqId = insertReq.rows[0].id;
 
             delete sohbetHafizasi[ctx.from.id];
             delete geciciVeri[ctx.from.id];
 
-            await ctx.reply(`🎉 **Çekim Talebiniz Başarıyla Alındı!**\n\n🪙 Çip Miktarı: **${chipMiktari} Çip**\n💵 TL Karşılığı: **${tlKarsiligi} ₺**\n🏦 IBAN: \`${iban}\`\n👤 Ad Soyad: ${adSoyad}\n\nİşleminiz incelendikten sonra ödemeniz IBAN'ınıza gönderilecektir.`, { parse_mode: 'Markdown', ...anaMenu });
+            await ctx.reply(`🎉 **Çekim Talebiniz Başarıyla Alındı!**\n\n🪙 Jeton Miktarı: **${jetonMiktari} Jeton**\n💵 TL Karşılığı: **${tlKarsiligi} ₺**\n🏦 IBAN: \`${iban}\`\n👤 Ad Soyad: ${adSoyad}\n\nİşleminiz incelendikten sonra ödemeniz IBAN'ınıza gönderilecektir.`, { parse_mode: 'Markdown', ...anaMenu });
 
             await bot.telegram.sendMessage(
                 PATRON_ID,
                 `🔔 **YENİ BAKIYE ÇEKİM TALEBİ (#${reqId})**\n\n` +
                 `👤 Satıcı: @${username} (ID: \`${telegramId}\`)\n` +
-                `🪙 Talep Edilen Çip: **${chipMiktari} Çip**\n` +
+                `🪙 Talep Edilen Jeton: **${jetonMiktari} Jeton**\n` +
                 `💵 Ödenecek Tutar: **${tlKarsiligi} ₺**\n` +
                 `🏦 IBAN: \`${iban}\`\n` +
                 `👤 Alıcı Ad Soyad: ${adSoyad}`,
@@ -1083,7 +1081,7 @@ bot.on('text', async (ctx) => {
         geciciVeri[ctx.from.id].baslik = mesaj;
         await db.query('INSERT INTO product_drafts (telegram_id, title) VALUES ($1, $2) ON CONFLICT (telegram_id) DO UPDATE SET title = $2', [ctx.from.id, mesaj]);
         sohbetHafizasi[ctx.from.id] = 'URUN_FIYATI_BEKLENIYOR'; 
-        return ctx.reply('✅ Başlık alındı.\n\nŞimdi bu ürünün açılması için Kaç Çip gerektiğini yaz (Minimum 50 Çip):', anaMenu);
+        return ctx.reply('✅ Başlık alındı.\n\nŞimdi bu ürünün açılması için Kaç Jeton gerektiğini yaz (Minimum 50 Jeton):', anaMenu);
     } 
     
     if (asama === 'URUN_FIYATI_BEKLENIYOR') {
@@ -1091,14 +1089,14 @@ bot.on('text', async (ctx) => {
         if (isNaN(fiyat) || fiyat <= 0) return ctx.reply('❌ Lütfen sadece geçerli bir rakam yazın:');
         
         if (fiyat < 50) {
-            return ctx.reply('⚠️ Minimum 50 çip değerinde ilan açılabilir! Lütfen 50 veya üzerinde bir çip miktarı yazın:');
+            return ctx.reply('⚠️ Minimum 50 jeton değerinde ilan açılabilir! Lütfen 50 veya üzerinde bir jeton miktarı yazın:');
         }
 
         if (!geciciVeri[ctx.from.id]) geciciVeri[ctx.from.id] = {};
         geciciVeri[ctx.from.id].fiyat = fiyat;
         await db.query('UPDATE product_drafts SET price = $2 WHERE telegram_id = $1', [ctx.from.id, fiyat]);
         sohbetHafizasi[ctx.from.id] = 'URUN_FOTOGRAFI_BEKLENIYOR';
-        return ctx.reply(`✅ Fiyat ${fiyat} Çip olarak belirlendi.\n\nŞimdi buraya anlık fotoğraf gönderin:`, anaMenu);
+        return ctx.reply(`✅ Fiyat ${fiyat} Jeton olarak belirlendi.\n\nŞimdi buraya anlık fotoğraf gönderin:`, anaMenu);
     } 
     
     if (asama === 'URUN_FOTOGRAFI_BEKLENIYOR') {
@@ -1130,7 +1128,7 @@ bot.on('photo', async (ctx) => {
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
-                    [Markup.button.callback(`💬 Açık (${ozelMesajBedeli} Çip)`, 'ilan_ayar_acik')],
+                    [Markup.button.callback(`💬 Açık (${ozelMesajBedeli} Jeton)`, 'ilan_ayar_acik')],
                     [Markup.button.callback('🔒 Gizli (Mesajlaşma Kapalı)', 'ilan_ayar_gizli')]
                 ])
             }
@@ -1182,7 +1180,7 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
         const satici = sellerCheck.rows[0];
         
         const insertUrun = await db.query(
-            'INSERT INTO products (seller_id, title, unlock_cost_chips, is_messaging_enabled) VALUES ($1, $2, $3, $4) RETURNING id',
+            'INSERT INTO products (seller_id, title, unlock_cost_jetons, is_messaging_enabled) VALUES ($1, $2, $3, $4) RETURNING id',
             [satici.id, baslik, fiyat, isMessagingEnabled]
         );
         const urunId = insertUrun.rows[0].id;
@@ -1194,8 +1192,8 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
         delete geciciVeri[telegramId];
         
         const rozet = await getSellerBadge(satici.id);
-        const captionText = `🚨 YENİ GİZLİ ÜRÜN Eklendi!\n\n🏪 Mağaza: ${satici.store_name} ${rozet}\n📦 Ürün: ${baslik}\n🔒 Durum: GİZLİ\n🪙 Bedel: ${fiyat} Çip`;
-        const butonlar = Markup.inlineKeyboard([Markup.button.callback(`🔓 ${fiyat} Çipe Aç`, `urunu_ac_${urunId}_${fiyat}`)]);
+        const captionText = `🚨 YENİ GİZLİ ÜRÜN Eklendi!\n\n🏪 Mağaza: ${satici.store_name} ${rozet}\n📦 Ürün: ${baslik}\n🔒 Durum: GİZLİ\n🪙 Bedel: ${fiyat} Jeton`;
+        const butonlar = Markup.inlineKeyboard([Markup.button.callback(`🔓 ${fiyat} Jetona Aç`, `urunu_ac_${urunId}_${fiyat}`)]);
 
         ilanKuyrugu.push({ sellerTelegramId: telegramId.toString(), blurredFileId, captionText, butonlar });
         ilanKuyrugunuIsle();

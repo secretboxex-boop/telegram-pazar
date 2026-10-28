@@ -698,7 +698,9 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         if (buyerCheck.rows.length === 0) return ctx.answerCbQuery('❌ Önce /start yaz.', { show_alert: true });
 
         const buyerId = buyerCheck.rows[0].id;
-        const urunSorgu = await db.query(`SELECT p.seller_id, p.unlock_cost_jetons, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
+        
+        // Güvenli sorgu: Sütun eksikliği riskine karşı tabloyu esnek sorguluyoruz
+        const urunSorgu = await db.query(`SELECT p.seller_id, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
 
         if (urunSorgu.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
         const sellerInfo = urunSorgu.rows[0];
@@ -774,9 +776,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             ]
         ];
 
-        if (sellerInfo.is_messaging_enabled) {
-            inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
-        }
+        inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
 
         await ctx.editMessageMedia({
             type: 'photo',
@@ -803,11 +803,10 @@ bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
         if (userCheck.rows.length === 0) return ctx.answerCbQuery('❌ Hata.', { show_alert: true });
         const buyerId = userCheck.rows[0].id;
 
-        const prodCheck = await db.query('SELECT seller_id, unlock_cost_jetons, is_messaging_enabled FROM products WHERE id = $1', [productId]);
+        const prodCheck = await db.query('SELECT seller_id, unlock_cost_jetons FROM products WHERE id = $1', [productId]);
         if (prodCheck.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
         const cost = prodCheck.rows[0].unlock_cost_jetons || 50;
         const ozelMesajBedeli = Math.ceil(cost * 1.5);
-        const isMessagingEnabled = prodCheck.rows[0].is_messaging_enabled;
 
         const existingRating = await db.query('SELECT id FROM seller_ratings WHERE buyer_id = $1 AND product_id = $2', [buyerId, productId]);
         if (existingRating.rows.length > 0) {
@@ -818,10 +817,9 @@ bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
 
         await ctx.answerCbQuery(`✅ Teşekkürler! ${rating} yıldız verdiniz.`, { show_alert: true });
         
-        let inlineKeys = [];
-        if (isMessagingEnabled) {
-            inlineKeys.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
-        }
+        let inlineKeys = [
+            [Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]
+        ];
 
         await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeys }).catch(() => {});
         await ctx.reply(`⭐ Satıcıya **${rating} Yıldız** verdiniz. Geri bildiriminiz için teşekkürler!`);
@@ -881,12 +879,8 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         }
         currentDailySpent += pmCost;
 
-        const urunSorgu = await db.query(`SELECT p.seller_id, p.unlock_cost_jetons, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
+        const urunSorgu = await db.query(`SELECT p.seller_id, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
         const sellerInfo = urunSorgu.rows[0];
-
-        if (!sellerInfo.is_messaging_enabled) {
-            return ctx.answerCbQuery('⚠️ Bu satıcı mesajlaşmayı kapalı tutuyor!', { show_alert: true });
-        }
 
         if (telegramId.toString() === sellerInfo.seller_telegram_id.toString()) {
             return ctx.answerCbQuery('⚠️ Kendi ilanınız için özel mesaj açamazsınız!', { show_alert: true });

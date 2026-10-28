@@ -61,6 +61,9 @@ db.connect().then(async () => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS unlock_cost_jetons INT DEFAULT 50;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS is_messaging_enabled BOOLEAN DEFAULT true;
+
         CREATE TABLE IF NOT EXISTS product_images (
             id SERIAL PRIMARY KEY,
             product_id INT REFERENCES products(id) ON DELETE CASCADE,
@@ -708,8 +711,10 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) {
+            // Pop-up uyarısını "Yetersiz çip" olarak gösteriyoruz
             await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
             
+            // 3 saniye sonra fiyat politikasını gönderiyoruz
             setTimeout(async () => {
                 try {
                     await bot.telegram.sendMessage(
@@ -1228,7 +1233,7 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
         const captionText = `🚨 YENİ GİZLİ ÜRÜN Eklendi!\n\n🏪 Mağaza: ${satici.store_name} ${rozet}\n📦 Ürün: ${baslik}\n🔒 Durum: GİZLİ\n🪙 Bedel: ${fiyat} Jeton`;
         const butonlar = Markup.inlineKeyboard([Markup.button.callback(`🔓 ${fiyat} Jetona Aç`, `urunu_ac_${urunId}_${fiyat}`)]);
 
-ilanKuyrugu.push({ sellerTelegramId: telegramId.toString(), blurredFileId, captionText, butonlar });
+        ilanKuyrugu.push({ sellerTelegramId: telegramId.toString(), blurredFileId, captionText, butonlar });
         ilanKuyrugunuIsle();
 
         await ctx.editMessageCaption({ caption: `🎉 İlanınız başarıyla oluşturuldu ve yayın sırasına eklendi!` }).catch(()=>{});

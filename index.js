@@ -14,7 +14,6 @@ if (!token) throw new Error('BOT_TOKEN bulunamadı!');
 const bot = new Telegraf(token);
 const app = express();
 
-// 🟢 UptimeRobot ve tarayıcı istekleri için kök dizin yanıtı (404 hatasını önler, sistemi yeşil tutar)
 app.get('/', (req, res) => {
     res.send('Sunucu aktif ve çalışıyor.');
 });
@@ -217,9 +216,6 @@ const handleStart = async (ctx) => {
 bot.start(handleStart);
 bot.command('start', handleStart);
 
-// ==========================================
-// 👑 YÖNETİCİ & JETON İŞLEMLERİ KOMUTLARI
-// ==========================================
 bot.command('admin', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return;
     try {
@@ -233,7 +229,6 @@ bot.command('admin', async (ctx) => {
     } catch (e) {}
 });
 
-// 🗑️ TÜM ÜRÜNLERİ SIFIRLAMA KOMUTU
 bot.command('urunsifirla', async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return ctx.reply('❌ Bu komutu kullanmaya yetkin yok.');
     try {
@@ -245,10 +240,8 @@ bot.command('urunsifirla', async (ctx) => {
     }
 });
 
-// 🏪 MAĞAZA ADINI DEĞİŞTİRME KOMUTU
 bot.command('magazadi', async (ctx) => {
     const yeniAd = ctx.message.text.split(' ').slice(1).join(' ').trim();
-    
     if (!yeniAd) {
         return ctx.reply('❌ Lütfen geçerli bir yeni mağaza adı yazın.\nÖrnek: `/magazadi Petshopya`', { parse_mode: 'Markdown' });
     }
@@ -266,7 +259,6 @@ bot.command('magazadi', async (ctx) => {
         }
 
         await db.query('UPDATE seller_profiles SET store_name = $1 WHERE user_id = $2', [yeniAd, userId]);
-
         await ctx.reply(`✅ Mağaza adınız başarıyla **${yeniAd}** olarak güncellendi!`, { parse_mode: 'Markdown' });
     } catch (error) {
         console.error('Mağaza adı güncelleme hatası:', error);
@@ -514,9 +506,6 @@ bot.command('grubuac', async (ctx) => {
     }
 });
 
-// ==========================================
-// 💰 BAKIYE ÇEKİM TALEBİ TETİKLEYİCİSİ (SADECE SATICILAR)
-// ==========================================
 const bakiyeCekIslemiBaslat = async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
@@ -551,9 +540,6 @@ const bakiyeCekIslemiBaslat = async (ctx) => {
 bot.hears(['💰 Bakiye Çek', 'Bakiye Çek'], bakiyeCekIslemiBaslat);
 bot.command('bakiyecek', bakiyeCekIslemiBaslat);
 
-// ==========================================
-// 💬 BUTON İŞLEYİCİLERİ
-// ==========================================
 bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
@@ -565,7 +551,6 @@ bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     });
 });
 
-// 🟢 JETON FİYAT POLİTİKASI
 bot.hears(['📊 Jeton Fiyat Politikası', 'Jeton Fiyat Politikası'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
@@ -603,7 +588,6 @@ bot.hears(['📊 Jeton Fiyat Politikası', 'Jeton Fiyat Politikası'], async (ct
     );
 });
 
-// 🟢 PAKET YÜKLE
 bot.action(/paket_yukle_(\d+)_(\d+)/, async (ctx) => {
     const jetonMiktari = ctx.match[1];
     const tlFiyati = ctx.match[2];
@@ -628,7 +612,6 @@ bot.action(/paket_yukle_(\d+)_(\d+)/, async (ctx) => {
     });
 });
 
-// 🟢 GÜNLÜK ÖDÜL
 bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
@@ -702,7 +685,6 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// ÜRÜN AÇMA (Yetersiz bakiyede doğrudan jeton yükleme menüsü açar)
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -800,7 +782,6 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     }
 });
 
-// YILDIZ VERME 
 bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -907,9 +888,6 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
     } catch (error) {}
 });
 
-// ==========================================
-// 🛡️ ADMIN ONAY VE RET BUTON İŞLEYİCİLERİ
-// ==========================================
 bot.action(/cek_onayla_(\d+)/, async (ctx) => {
     if (ctx.from.id.toString() !== PATRON_ID) return ctx.answerCbQuery('Yetkiniz yok.', { show_alert: true });
     const reqId = ctx.match[1];
@@ -981,9 +959,6 @@ bot.action(/cek_reddet_(\d+)/, async (ctx) => {
     }
 });
 
-// ==========================================
-// 📝 METİN VE ÇEKİM SİHİRBAZI YÖNETİCİSİ
-// ==========================================
 bot.on('text', async (ctx) => {
     const mesaj = ctx.message.text;
     const butonlar = ['🏪 İlan Ver', '🎁 Günlük Ödül', '💰 Bakiye Çek', '💬 Admin ile Görüş', '📊 Jeton Fiyat Politikası', 'İlan Ver', 'Günlük Ödül', 'Bakiye Çek', 'Admin ile Görüş', 'Jeton Fiyat Politikası'];
@@ -1249,7 +1224,6 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
 });
 
 bot.launch().then(async () => {
-    // Sol alttaki / menü butonu komutları
     await bot.telegram.setMyCommands([
         { command: 'start', description: 'Ana Menüyü Aç' },
         { command: 'magazadi', description: 'Mağaza Adını Değiştir' },

@@ -711,29 +711,35 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) {
-            await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
+            // 1. Önce kullanıcıya pop-up olarak "Yetersiz çip" uyarısını veriyoruz
+            await ctx.answerCbQuery('❌ Yetersiz çip! Jeton politikası yönlendiriliyor...', { show_alert: true });
             
-            // Callback query üzerinden doğrudan mesaj atmak yerine kullanıcıya yeni mesaj gönderiyoruz
-            await bot.telegram.sendMessage(
-                telegramId,
-                `⚠️ **Yetersiz Bakiye!**\n\n` +
-                `Bu içeriği açabilmek için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
-                `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
-                `• 250 Jeton ➔ \`110 ₺\`\n` +
-                `• 1.000 Jeton ➔ \`375 ₺\`\n` +
-                `• 2.500 Jeton ➔ \`875 ₺\`\n` +
-                `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
-                `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
-                {
-                    parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([
-                        [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
-                        [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                        [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                        [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
-                    ])
-                }
-            );
+            // 2. 3 saniye (3000ms) bekleyip jeton fiyat politikasını ve paketlerini gönderiyoruz
+            setTimeout(async () => {
+                try {
+                    await bot.telegram.sendMessage(
+                        telegramId,
+                        `⚠️ **Yetersiz Bakiye!**\n\n` +
+                        `Bu içeriği açabilmek için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
+                        `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
+                        `• 250 Jeton ➔ \`110 ₺\`\n` +
+                        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+                        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+                        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
+                        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+                        {
+                            parse_mode: 'Markdown',
+                            ...Markup.inlineKeyboard([
+                                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                            ])
+                        }
+                    );
+                } catch (err) {}
+            }, 3000);
+
             return;
         }
 
@@ -782,7 +788,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
         });
 
-        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Một Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
     } catch (error) {
         console.error("urunu_ac hatasi:", error);
         await ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
@@ -837,28 +843,33 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
+            await ctx.answerCbQuery('❌ Yetersiz çip! Jeton politikası yönlendiriliyor...', { show_alert: true });
             
-            await bot.telegram.sendMessage(
-                telegramId,
-                `⚠️ **Yetersiz Bakiye!**\n\n` +
-                `Özel mesajlaşma başlatabilmek için **${pmCost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
-                `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
-                `• 250 Jeton ➔ \`110 ₺\`\n` +
-                `• 1.000 Jeton ➔ \`375 ₺\`\n` +
-                `• 2.500 Jeton ➔ \`875 ₺\`\n` +
-                `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
-                `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
-                {
-                    parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([
-                        [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
-                        [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                        [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                        [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
-                    ])
-                }
-            );
+            setTimeout(async () => {
+                try {
+                    await bot.telegram.sendMessage(
+                        telegramId,
+                        `⚠️ **Yetersiz Bakiye!**\n\n` +
+                        `Özel mesajlaşma başlatabilmek için **${pmCost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
+                        `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
+                        `• 250 Jeton ➔ \`110 ₺\`\n` +
+                        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+                        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+                        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
+                        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+                        {
+                            parse_mode: 'Markdown',
+                            ...Markup.inlineKeyboard([
+                                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                            ])
+                        }
+                    );
+                } catch (err) {}
+            }, 3000);
+
             return;
         }
 

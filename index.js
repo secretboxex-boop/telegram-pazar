@@ -702,7 +702,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// ÜRÜN AÇMA
+// ÜRÜN AÇMA (Yetersiz bakiyede doğrudan jeton yükleme menüsü açar)
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -725,7 +725,28 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
-        if (currentBalance < cost) return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
+        if (currentBalance < cost) {
+            await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
+            return ctx.reply(
+                `⚠️ **Yetersiz Bakiye!**\n\n` +
+                `Bu içeriği açabilmek için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
+                `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
+                `• 250 Jeton ➔ \`110 ₺\`\n` +
+                `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+                `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+                `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
+                `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([
+                        [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                        [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                        [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                        [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                    ])
+                }
+            );
+        }
 
         const bugun = new Date().toISOString().split('T')[0];
         let currentDailySpent = buyerWallet.rows[0].daily_spent_jetons || 0;
@@ -827,7 +848,28 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerCheck.rows[0].id]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
-        if (currentBalance < pmCost) return ctx.answerCbQuery(`❌ Yetersiz Bakiye!`, { show_alert: true });
+        if (currentBalance < pmCost) {
+            await ctx.answerCbQuery(`❌ Yetersiz Bakiye! Jeton yükleme menüsü açılıyor...`, { show_alert: true });
+            return ctx.reply(
+                `⚠️ **Yetersiz Bakiye!**\n\n` +
+                `Özel mesajlaşma başlatabilmek için **${pmCost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
+                `📊 **JETON FİYAT POLİTİKASI VE PAKETLERİ**\n\n` +
+                `• 250 Jeton ➔ \`110 ₺\`\n` +
+                `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+                `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+                `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
+                `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([
+                        [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                        [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                        [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                        [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                    ])
+                }
+            );
+        }
 
         const bugun = new Date().toISOString().split('T')[0];
         let currentDailySpent = buyerWallet.rows[0].daily_spent_jetons || 0;

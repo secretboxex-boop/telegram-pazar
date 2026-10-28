@@ -698,7 +698,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         if (buyerCheck.rows.length === 0) return ctx.answerCbQuery('❌ Önce /start yaz.', { show_alert: true });
 
         const buyerId = buyerCheck.rows[0].id;
-        const urunSorgu = await db.query(`SELECT p.seller_id, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
+        const urunSorgu = await db.query(`SELECT p.seller_id, p.unlock_cost_jetons, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
 
         if (urunSorgu.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
         const sellerInfo = urunSorgu.rows[0];
@@ -711,10 +711,8 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) {
-            // Pop-up uyarısını "Yetersiz çip" olarak gösteriyoruz
             await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
             
-            // 3 saniye sonra fiyat politikasını gönderiyoruz
             setTimeout(async () => {
                 try {
                     await bot.telegram.sendMessage(
@@ -883,7 +881,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         }
         currentDailySpent += pmCost;
 
-        const urunSorgu = await db.query(`SELECT p.seller_id, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
+        const urunSorgu = await db.query(`SELECT p.seller_id, p.unlock_cost_jetons, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
         const sellerInfo = urunSorgu.rows[0];
 
         if (!sellerInfo.is_messaging_enabled) {

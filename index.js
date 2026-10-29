@@ -162,7 +162,6 @@ async function ilanKuyrugunuIsle() {
     kuyrukİsleniyor = false;
 }
 
-// Ana menü butonu "🪙 Jeton Ekle" olarak güncellendi
 const anaMenu = Markup.keyboard([
     ['🏪 İlan Ver', '🎁 Günlük Ödül'],
     ['💰 Bakiye Çek', '🪙 Jeton Ekle'],
@@ -532,6 +531,21 @@ const bakiyeCekIslemiBaslat = async (ctx) => {
         sohbetHafizasi[ctx.from.id] = 'CEKIM_JETON_BEKLENIYOR';
         geciciVeri[ctx.from.id] = {};
         
+        // Kişiye özel gizlilik için özel mesaja yönlendiriyoruz
+        if (ctx.chat.type !== 'private') {
+            await ctx.answerCbQuery('⚠️ Güvenliğiniz ve gizliliğiniz için bakiye çekim işlemini botun özel sohbetinden başlatmalısınız.', { show_alert: true });
+            try {
+                await bot.telegram.sendMessage(
+                    ctx.from.id,
+                    `💸 **Bakiye Çekim Talebi**\n\n` +
+                    `🪙 **Mevcut Bakiyeniz:** *${mevcutBakiye} Jeton*\n\n` +
+                    `Çekmek istediğiniz **Jeton** miktarını yazın (Minimum 20.000 Jeton):`,
+                    { parse_mode: 'Markdown' }
+                );
+            } catch (e) {}
+            return;
+        }
+
         await ctx.reply(
             `💸 **Bakiye Çekim Talebi**\n\n` +
             `🪙 **Mevcut Bakiyeniz:** *${mevcutBakiye} Jeton*\n\n` +
@@ -549,6 +563,27 @@ bot.command('bakiyecek', bakiyeCekIslemiBaslat);
 bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
+    
+    // Grupta kirlilik yaratmamak ve gizlilik için özel mesaja yönlendiriyoruz
+    if (ctx.chat.type !== 'private') {
+        try {
+            await bot.telegram.sendMessage(
+                ctx.from.id,
+                `💬 **Yönetici ile İletişim**\n\nSoru, öneri, sorun bildirimleri veya ödeme bildirimleri (dekont) için aşağıdaki butonu kullanarak doğrudan yöneticiye ulaşabilirsin:`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([
+                        Markup.button.url('💬 Admin\'e Mesaj Gönder', `tg://user?id=${PATRON_ID}`)
+                    ])
+                }
+            );
+            await ctx.answerCbQuery('💬 Bilgiler özel mesajınıza gönderildi.', { show_alert: false });
+        } catch (e) {
+            await ctx.answerCbQuery('⚠️ Lütfen önce bot ile özel sohbeti (private chat) başlatın.', { show_alert: true });
+        }
+        return;
+    }
+
     await ctx.reply(`💬 **Yönetici ile İletişim**\n\nSoru, öneri, sorun bildirimleri veya ödeme bildirimleri (dekont) için aşağıdaki butonu kullanarak doğrudan yöneticiye ulaşabilirsin:`, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -557,7 +592,7 @@ bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     });
 });
 
-// "🪙 Jeton Ekle" menü butonu ve komutu
+// "🪙 Jeton Ekle" menü butonu ve komutu (Gizlilik için özel mesaja atar)
 bot.hears(['🪙 Jeton Ekle', 'Jeton Ekle'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
@@ -575,24 +610,34 @@ bot.hears(['🪙 Jeton Ekle', 'Jeton Ekle'], async (ctx) => {
         }
     } catch (e) {}
 
-    await ctx.reply(
+    const paketMesaji = 
         `🪙 **JETON EKLE VE PAKETLER**\n\n` +
         `Kullanılabilir Bakiyeniz: \`${bakiye} Jeton\`\n\n` +
         `• 250 Jeton ➔ \`110 ₺\`\n` +
         `• 1.000 Jeton ➔ \`375 ₺\`\n` +
         `• 2.500 Jeton ➔ \`875 ₺\`\n` +
         `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
-        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
-        {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
-                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
-            ])
+        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`;
+
+    const paketButonlari = Markup.inlineKeyboard([
+        [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+        [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+        [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+        [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+    ]);
+
+    // Eğer grup içerisindense herkesin görmemesi için özel mesaja gönderiyoruz
+    if (ctx.chat.type !== 'private') {
+        try {
+            await bot.telegram.sendMessage(telegramId, paketMesaji, { parse_mode: 'Markdown', ...paketButonlari });
+            await ctx.answerCbQuery('🪙 Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
+        } catch (e) {
+            await ctx.answerCbQuery('⚠️ Lütfen önce bot ile özel sohbeti (private chat) başlatın.', { show_alert: true });
         }
-    );
+        return;
+    }
+
+    await ctx.reply(paketMesaji, { parse_mode: 'Markdown', ...paketButonlari });
 });
 
 bot.action(/paket_yukle_(\d+)_(\d+)/, async (ctx) => {
@@ -667,6 +712,16 @@ bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
         weeklyCount += 1;
         
         await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1, last_reward_date = $2, reward_week_start = $3, reward_weekly_count = $4 WHERE user_id = $5', [odul, bugun, weekStart, weeklyCount, userId]);
+        
+        // Gizlilik için ödül mesajını da özel mesaja atabiliriz veya yanıtlayabiliriz
+        if (ctx.chat.type !== 'private') {
+            await ctx.answerCbQuery(`🎁 ${odul} Jeton kazandın! Detaylar özel mesajına gönderildi.`, { show_alert: false });
+            try {
+                await bot.telegram.sendMessage(ctx.from.id, `🎁 **TEBRİKLER!** ${odul} Jeton kazandın!${vipMesaj}\n🪙 Yeni Bakiyen: ${balance + odul} Jeton`, { parse_mode: 'Markdown' });
+            } catch (e) {}
+            return;
+        }
+
         ctx.reply(`🎁 **TEBRİKLER!** ${odul} Jeton kazandın!${vipMesaj}\n🪙 Yeni Bakiyen: ${balance + odul} Jeton`, anaMenu);
     } catch (e) {}
 });
@@ -674,6 +729,39 @@ bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
 bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
+    
+    // İlan verme süreci de kişiye özel olmalı
+    if (ctx.chat.type !== 'private') {
+        try {
+            await bot.telegram.sendMessage(
+                ctx.from.id,
+                `🏪 **İlan Ver / Mağaza Yönetimi**\n\nMağaza açmak ve ilan yönetmek için aşağıdaki adımdan devam edebilirsiniz:`,
+                { parse_mode: 'Markdown' }
+            );
+            const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
+            if (userCheck.rows.length === 0) {
+                await bot.telegram.sendMessage(ctx.from.id, '⚠️ Önce /start yazarak kayıt ol!', anaMenu);
+                await ctx.answerCbQuery('⚠️ İlan verme adımları için botun özel mesajına yönlendirildiniz.', { show_alert: true });
+                return;
+            }
+            const sellerCheck = await db.query('SELECT * FROM seller_profiles WHERE user_id = $1', [userCheck.rows[0].id]);
+            if (sellerCheck.rows.length > 0) {
+                sohbetHafizasi[ctx.from.id] = 'URUN_ISMI_BEKLENIYOR';
+                geciciVeri[ctx.from.id] = {};
+                await db.query('INSERT INTO product_drafts (telegram_id, title, price, file_id) VALUES ($1, NULL, NULL, NULL) ON CONFLICT (telegram_id) DO UPDATE SET title = NULL, price = NULL, file_id = NULL', [ctx.from.id]);
+                await bot.telegram.sendMessage(ctx.from.id, 'Lütfen ürünün Başlığını yaz:');
+            } else {
+                sohbetHafizasi[ctx.from.id] = 'MAGAZA_ISMI_BEKLENIYOR';
+                geciciVeri[ctx.from.id] = {};
+                await bot.telegram.sendMessage(ctx.from.id, 'İlan verebilmek için önce bir Mağaza Adı yazıp gönder:');
+            }
+            await ctx.answerCbQuery('🏪 İlan verme adımları özel mesajınıza gönderildi!', { show_alert: false });
+        } catch (e) {
+            await ctx.answerCbQuery('⚠️ Lütfen önce bot ile özel sohbeti (private chat) başlatın.', { show_alert: true });
+        }
+        return;
+    }
+
     try {
         const userCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [ctx.from.id]);
         if (userCheck.rows.length === 0) return ctx.reply('⚠️ Önce /start yazarak kayıt ol!', anaMenu);
@@ -715,26 +803,24 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
-        // Jetonu yetersiz olduğunda istenen olumlu yönlendirme mesajı
+        // Çipi yetersiz olduğunda hatasız olumlu yönlendirme mesajı (Özel mesaja veya bildirim olarak atılır)
         if (currentBalance < cost) {
             await ctx.answerCbQuery('🪙 Cüzdanında yeterli jeton bulunmuyor!', { show_alert: true });
             
-            setTimeout(async () => {
-                try {
-                    await bot.telegram.sendMessage(
-                        telegramId,
-                        `✨ **Gizli görseli görebilmek için cüzdanına jeton eklemelisin!**\n\n` +
-                        `Bu içeriği açmak için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
-                        `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak cüzdanına jeton ekle ve gizli görselin tadını çıkar! 🚀`,
-                        {
-                            parse_mode: 'Markdown',
-                            ...Markup.inlineKeyboard([
-                                [Markup.button.callback('🪙 Hemen Jeton Ekle / Paketleri Gör', 'menu_jeton_ekle')]
-                            ])
-                        }
-                    );
-                } catch (err) {}
-            }, 3000);
+            try {
+                await bot.telegram.sendMessage(
+                    telegramId,
+                    `✨ **Gizli görseli görebilmek için cüzdanına jeton eklemelisin!**\n\n` +
+                    `Bu içeriği açmak için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
+                    `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak cüzdanına jeton ekle ve gizli görselin tadını çıkar! 🚀`,
+                    {
+                        parse_mode: 'Markdown',
+                        ...Markup.inlineKeyboard([
+                            [Markup.button.callback('🪙 Hemen Jeton Ekle / Paketleri Gör', 'menu_jeton_ekle')]
+                        ])
+                    }
+                );
+            } catch (err) {}
 
             return;
         }
@@ -781,19 +867,25 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
         }
 
+        // Görsel ortak kanalda açılır ama kalan bakiye ve kişisel işlemler sadece tıklayan kişinin özel mesajına gönderilir, böylece herkesin geçmişi kirletilmez
         await ctx.editMessageMedia({
             type: 'photo',
             media: orijinalFotoId,
-            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n🪙 Kalan Bakiyen: ${newBalance} Jeton\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`
+            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n⭐ Bu satıcıyı ve ürünü değerlendir:`
         }, {
             reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
         }).catch(async () => {
             await ctx.replyWithPhoto(orijinalFotoId, {
-                caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n🪙 Kalan Bakiyen: ${newBalance} Jeton\n\n⭐ Bu satıcıyı ve ürünü değerlendir:`,
+                caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${cost} Jeton\n⭐ Bu satıcıyı ve ürünü değerlendir:`,
                 ...Markup.inlineKeyboard(inlineButtons)
             });
             await ctx.deleteMessage().catch(()=>{});
         });
+
+        // Kişiye özel kalan bakiye bildirimi (Özel mesaja atılır)
+        try {
+            await bot.telegram.sendMessage(telegramId, `🔓 Görsel başarıyla açıldı!\n🪙 Kalan Bakiyeniz: ${newBalance} Jeton`, { parse_mode: 'Markdown' });
+        } catch(e) {}
 
         bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
     } catch (error) {
@@ -802,7 +894,6 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     }
 });
 
-// Yetersiz bakiye mesajındaki butona tıklandığında paketleri açma
 bot.action('menu_jeton_ekle', async (ctx) => {
     await ctx.answerCbQuery();
     const telegramId = ctx.from.id;
@@ -818,24 +909,27 @@ bot.action('menu_jeton_ekle', async (ctx) => {
         }
     } catch (e) {}
 
-    await ctx.reply(
-        `🪙 **JETON EKLE VE PAKETLER**\n\n` +
-        `Kullanılabilir Bakiyeniz: \`${bakiye} Jeton\`\n\n` +
-        `• 250 Jeton ➔ \`110 ₺\`\n` +
-        `• 1.000 Jeton ➔ \`375 ₺\`\n` +
-        `• 2.500 Jeton ➔ \`875 ₺\`\n` +
-        `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
-        `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
-        {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
-                [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
-                [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
-                [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
-            ])
-        }
-    );
+    try {
+        await bot.telegram.sendMessage(
+            telegramId,
+            `🪙 **JETON EKLE VE PAKETLER**\n\n` +
+            `Kullanılabilir Bakiyeniz: \`${bakiye} Jeton\`\n\n` +
+            `• 250 Jeton ➔ \`110 ₺\`\n` +
+            `• 1.000 Jeton ➔ \`375 ₺\`\n` +
+            `• 2.500 Jeton ➔ \`875 ₺\`\n` +
+            `• 5.000 Jeton ➔ \`1.650 ₺\`\n\n` +
+            `Yüklemek istediğiniz paketi seçmek için aşağıdaki butonları kullanabilirsiniz:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('💳 250 Jeton Yükle (110 ₺)', 'paket_yukle_250_110')],
+                    [Markup.button.callback('💳 1.000 Jeton Yükle (375 ₺)', 'paket_yukle_1000_375')],
+                    [Markup.button.callback('💳 2.500 Jeton Yükle (875 ₺)', 'paket_yukle_2500_875')],
+                    [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
+                ])
+            }
+        );
+    } catch (e) {}
 });
 
 bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
@@ -869,7 +963,9 @@ bot.action(/rate_(\d+)_([1-5])/, async (ctx) => {
         }
 
         await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeys }).catch(() => {});
-        await ctx.reply(`⭐ Satıcıya **${rating} Yıldız** verdiniz. Geri bildiriminiz için teşekkürler!`);
+        try {
+            await bot.telegram.sendMessage(telegramId, `⭐ Satıcıya **${rating} Yıldız** verdiniz. Geri bildiriminiz için teşekkürler!`, { parse_mode: 'Markdown' });
+        } catch(e) {}
     } catch (e) {
         await ctx.answerCbQuery('⚠️ Bu ürünü zaten oyladınız!', { show_alert: true });
     }
@@ -888,22 +984,20 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         if (currentBalance < pmCost) {
             await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
             
-            setTimeout(async () => {
-                try {
-                    await bot.telegram.sendMessage(
-                        telegramId,
-                        `✨ **Özel mesajlaşma başlatabilmek için cüzdanına jeton eklemelisin!**\n\n` +
-                        `Gerekli: **${pmCost} Jeton**, Mevcut: \`${currentBalance} Jeton\`.\n\n` +
-                        `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak jeton yükle ve sohbete başla! 🚀`,
-                        {
-                            parse_mode: 'Markdown',
-                            ...Markup.inlineKeyboard([
-                                [Markup.button.callback('🪙 Hemen Jeton Ekle / Paketleri Gör', 'menu_jeton_ekle')]
-                            ])
-                        }
-                    );
-                } catch (err) {}
-            }, 3000);
+            try {
+                await bot.telegram.sendMessage(
+                    telegramId,
+                    `✨ **Özel mesajlaşma başlatabilmek için cüzdanına jeton eklemelisin!**\n\n` +
+                    `Gerekli: **${pmCost} Jeton**, Mevcut: \`${currentBalance} Jeton\`.\n\n` +
+                    `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak jeton yükle ve sohbete başla! 🚀`,
+                    {
+                        parse_mode: 'Markdown',
+                        ...Markup.inlineKeyboard([
+                            [Markup.button.callback('🪙 Hemen Jeton Ekle / Paketleri Gör', 'menu_jeton_ekle')]
+                        ])
+                    }
+                );
+            } catch (err) {}
 
             return;
         }
@@ -937,8 +1031,10 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
         await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(()=>{});
 
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-        await ctx.reply(`✅ **Ödeme Başarılı!**\n\n👉 [Satıcıya Özel Mesaj Gönder](tg://user?id=${sellerInfo.seller_telegram_id})\n\n🪙 Kalan: ${newBalance} Jeton`, { parse_mode: 'Markdown' });
+        await ctx.answerCbQuery('✅ Özel mesaj talebi oluşturuldu.', { show_alert: false });
+        try {
+            await bot.telegram.sendMessage(telegramId, `✅ **Ödeme Başarılı!**\n\n👉 [Satıcıya Özel Mesaj Gönder](tg://user?id=${sellerInfo.seller_telegram_id})\n\n🪙 Kalan: ${newBalance} Jeton`, { parse_mode: 'Markdown' });
+        } catch(e) {}
 
         bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `✉️ **YENİ ÖZEL MESAJ TALEBİ!**\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!\n👉 [Müşterinin Profiline Git](tg://user?id=${telegramId})`, { parse_mode: 'Markdown' }).catch(() => {});
     } catch (error) {}

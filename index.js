@@ -531,9 +531,8 @@ const bakiyeCekIslemiBaslat = async (ctx) => {
         sohbetHafizasi[ctx.from.id] = 'CEKIM_JETON_BEKLENIYOR';
         geciciVeri[ctx.from.id] = {};
         
-        // Kişiye özel gizlilik için özel mesaja yönlendiriyoruz
         if (ctx.chat.type !== 'private') {
-            await ctx.answerCbQuery('⚠️ Güvenliğiniz ve gizliliğiniz için bakiye çekim işlemini botun özel sohbetinden başlatmalısınız.', { show_alert: true });
+            await ctx.answerCbQuery('⚠️ Güvenliğiniz için bakiye çekim işlemini botun özel sohbetinden başlatmalısınız.', { show_alert: true });
             try {
                 await bot.telegram.sendMessage(
                     ctx.from.id,
@@ -564,7 +563,6 @@ bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
     
-    // Grupta kirlilik yaratmamak ve gizlilik için özel mesaja yönlendiriyoruz
     if (ctx.chat.type !== 'private') {
         try {
             await bot.telegram.sendMessage(
@@ -592,7 +590,6 @@ bot.hears(['💬 Admin ile Görüş', 'Admin ile Görüş'], async (ctx) => {
     });
 });
 
-// "🪙 Jeton Ekle" menü butonu ve komutu (Gizlilik için özel mesaja atar)
 bot.hears(['🪙 Jeton Ekle', 'Jeton Ekle'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
@@ -626,7 +623,6 @@ bot.hears(['🪙 Jeton Ekle', 'Jeton Ekle'], async (ctx) => {
         [Markup.button.callback('💳 5.000 Jeton Yükle (1.650 ₺)', 'paket_yukle_5000_1650')]
     ]);
 
-    // Eğer grup içerisindense herkesin görmemesi için özel mesaja gönderiyoruz
     if (ctx.chat.type !== 'private') {
         try {
             await bot.telegram.sendMessage(telegramId, paketMesaji, { parse_mode: 'Markdown', ...paketButonlari });
@@ -713,7 +709,6 @@ bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
         
         await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1, last_reward_date = $2, reward_week_start = $3, reward_weekly_count = $4 WHERE user_id = $5', [odul, bugun, weekStart, weeklyCount, userId]);
         
-        // Gizlilik için ödül mesajını da özel mesaja atabiliriz veya yanıtlayabiliriz
         if (ctx.chat.type !== 'private') {
             await ctx.answerCbQuery(`🎁 ${odul} Jeton kazandın! Detaylar özel mesajına gönderildi.`, { show_alert: false });
             try {
@@ -730,7 +725,6 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     delete sohbetHafizasi[ctx.from.id];
     delete geciciVeri[ctx.from.id];
     
-    // İlan verme süreci de kişiye özel olmalı
     if (ctx.chat.type !== 'private') {
         try {
             await bot.telegram.sendMessage(
@@ -803,9 +797,10 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
-        // Çipi yetersiz olduğunda hatasız olumlu yönlendirme mesajı (Özel mesaja veya bildirim olarak atılır)
+        // BAKİYE YETERSİZ KALDIĞINDA ANINDA HATASIZ YÖNLENDİRME (Kritik Düzeltme)
         if (currentBalance < cost) {
-            await ctx.answerCbQuery('🪙 Cüzdanında yeterli jeton bulunmuyor!', { show_alert: true });
+            // Telegram'ın hata pop-up vermemesi için olumlu yanıt veriyoruz
+            await ctx.answerCbQuery('🪙 Cüzdanında yeterli jeton bulunmuyor, yönlendiriliyorsun...', { show_alert: false });
             
             try {
                 await bot.telegram.sendMessage(
@@ -867,7 +862,6 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
         }
 
-        // Görsel ortak kanalda açılır ama kalan bakiye ve kişisel işlemler sadece tıklayan kişinin özel mesajına gönderilir, böylece herkesin geçmişi kirletilmez
         await ctx.editMessageMedia({
             type: 'photo',
             media: orijinalFotoId,
@@ -882,7 +876,6 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             await ctx.deleteMessage().catch(()=>{});
         });
 
-        // Kişiye özel kalan bakiye bildirimi (Özel mesaja atılır)
         try {
             await bot.telegram.sendMessage(telegramId, `🔓 Görsel başarıyla açıldı!\n🪙 Kalan Bakiyeniz: ${newBalance} Jeton`, { parse_mode: 'Markdown' });
         } catch(e) {}
@@ -982,7 +975,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery('❌ Yetersiz çip!', { show_alert: true });
+            await ctx.answerCbQuery('🪙 Cüzdanında yeterli jeton bulunmuyor, yönlendiriliyorsun...', { show_alert: false });
             
             try {
                 await bot.telegram.sendMessage(

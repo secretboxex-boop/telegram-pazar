@@ -700,7 +700,7 @@ bot.hears(['🎁 Günlük Ödül', 'Günlük Ödül'], async (ctx) => {
         let vipMesaj = "";
         if (isVipToday) {
             odul = Math.floor(Math.random() * 11) + 10;
-            vipMesaj = "\n👑 **VIP ALICI Ödülü UYGULANDI!** (Bugün 1500+ jeton harcadığın için)";
+            vipMesaj = "\n👑 **VIP ALICI ÖDÜLÜ UYGULANDI!** (Bugün 1500+ jeton harcadığın için)";
         } else {
             odul = Math.floor(Math.random() * 3) + 2;
         }
@@ -774,6 +774,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
+// BURASI DÜZELTİLDİ: Artık hata pop-up'ı yerine TAMAMEN ÖZEL BİR MESAJ GİDİYOR
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -797,14 +798,14 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
-        // KESİN ÇÖZÜM: answerCbQuery kaldırıldı, hata pop-up'ı çıkmayacak. Doğrudan özel mesaja yönlendiriliyor.
         if (currentBalance < cost) {
-            await ctx.answerCbQuery(); // Boş geçilerek hata kutusu tamamen engellenir
+            // Hata pop-up'ını engellemek için show_alert: false ve özel metin veriyoruz
+            await ctx.answerCbQuery('🪙 Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
             
             try {
                 await bot.telegram.sendMessage(
                     telegramId,
-                    `✨ **Görseli açabilmek için menüden jeton ekle!**\n\n` +
+                    `✨ **Görseli açabilmek için lütfen menüden jeton ekle!**\n\n` +
                     `Bu içeriği açmak için **${cost} Jeton** gerekiyor, ancak mevcut bakiyeniz: \`${currentBalance} Jeton\`.\n\n` +
                     `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak cüzdanına jeton ekle ve gizli görselin tadını çıkar! 🚀`,
                     {
@@ -974,12 +975,12 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery(); // Hata kutusu engellendi
+            await ctx.answerCbQuery('🪙 Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
             
             try {
                 await bot.telegram.sendMessage(
                     telegramId,
-                    `✨ **Görseli açabilmek için menüden jeton ekle!**\n\n` +
+                    `✨ **Görseli açabilmek için lütfen menüden jeton ekle!**\n\n` +
                     `Gerekli: **${pmCost} Jeton**, Mevcut: \`${currentBalance} Jeton\`.\n\n` +
                     `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak jeton yükle ve sohbete başla! 🚀`,
                     {
@@ -1315,7 +1316,7 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
         const fileId = draft && draft.file_id ? draft.file_id : null;
 
         if (!fileId) {
-            return ctx.answerCbQuery('⚠️ ilanın fotoğrafını tekrar gönderin.', { show_alert: true });
+            return ctx.answerCbQuery('⚠️ Lütfen ilanın fotoğrafını tekrar gönderin.', { show_alert: true });
         }
 
         await ctx.answerCbQuery('✅ İlan işleniyor...');
@@ -1348,7 +1349,7 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
 
         await db.query('INSERT INTO product_images (product_id, original_storage_key, preview_storage_key) VALUES ($1, $2, $3)', [urunId, fileId, blurredFileId]);
         
-        await db.query('DELETE FROM product_drafts WHERE telegram_id = $1', [telegramId]);
+        box.query('DELETE FROM product_drafts WHERE telegram_id = $1', [telegramId]).catch(()=>{});
         delete sohbetHafizasi[telegramId];
         delete geciciVeri[telegramId];
         

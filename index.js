@@ -797,9 +797,9 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
         const currentBalance = buyerWallet.rows[0].available_balance;
 
-        // KESİN ÇÖZÜM: Telegram'ın hata vermemesi için answerCbQuery ile anında uyarı veriyoruz ve özel mesaja yönlendiriyoruz
+        // KESİN ÇÖZÜM: Telegram'ın hata pop-up'ı vermemesi için show_alert: true ile doğrudan bildirim gösteriyoruz
         if (currentBalance < cost) {
-            await ctx.answerCbQuery('🪙 Yetersiz Bakiye! Jeton ekleme seçenekleri özel mesajınıza gönderildi.', { show_alert: true });
+            await ctx.answerCbQuery(`🪙 Yetersiz Jeton! Gerekli: ${cost}, Mevcut: ${currentBalance}. Jeton eklemek için mesaja bakın.`, { show_alert: true });
             
             try {
                 await bot.telegram.sendMessage(
@@ -974,7 +974,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery('🪙 Yetersiz Bakiye! Jeton ekleme seçenekleri özel mesajınıza gönderildi.', { show_alert: true });
+            await ctx.answerCbQuery(`🪙 Yetersiz Jeton! Gerekli: ${pmCost}, Mevcut: ${currentBalance}. Jeton eklemek için mesaja bakın.`, { show_alert: true });
             
             try {
                 await bot.telegram.sendMessage(

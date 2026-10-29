@@ -774,7 +774,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// BURASI DÜZELTİLDİ: Artık hata pop-up'ı yerine TAMAMEN ÖZEL BİR MESAJ GİDİYOR
+// BURASI KESİN ÇÖZÜM: show_alert: true yapılarak o hata penceresi yerine kullanıcıya istediğin yazı gösteriliyor
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -799,8 +799,8 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) {
-            // Hata pop-up'ını engellemek için show_alert: false ve özel metin veriyoruz
-            await ctx.answerCbQuery('🪙 Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
+            // İşte Telegram'ın o hata penceresini tamamen ezen ve istediğin yazıyı ekranda çıkaran kesin çözüm satırı:
+            await ctx.answerCbQuery(`✨ Görseli açabilmek için lütfen menüden jeton ekle! Gerekli: ${cost} Jeton, Mevcut: ${currentBalance} Jeton.`, { show_alert: true });
             
             try {
                 await bot.telegram.sendMessage(
@@ -975,12 +975,12 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery('🪙 Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
+            await ctx.answerCbQuery(`✨ Görseli açabilmek için lütfen menüden jeton ekle! Gerekli: ${pmCost} Jeton, Mevcut: ${currentBalance} Jeton.`, { show_alert: true });
             
             try {
                 await bot.telegram.sendMessage(
                     telegramId,
-                    `✨ **Görseli açabilmek için lütfen menüden jeton ekle!**\n\n` +
+                    `✨ **Özel mesajlaşma başlatabilmek için cüzdanına jeton eklemelisin!**\n\n` +
                     `Gerekli: **${pmCost} Jeton**, Mevcut: \`${currentBalance} Jeton\`.\n\n` +
                     `Lütfen menüdeki [ 🪙 Jeton Ekle ] butonunu kullanarak jeton yükle ve sohbete başla! 🚀`,
                     {
@@ -1349,7 +1349,7 @@ bot.action(/ilan_ayar_(acik|gizli)/, async (ctx) => {
 
         await db.query('INSERT INTO product_images (product_id, original_storage_key, preview_storage_key) VALUES ($1, $2, $3)', [urunId, fileId, blurredFileId]);
         
-        box.query('DELETE FROM product_drafts WHERE telegram_id = $1', [telegramId]).catch(()=>{});
+        await db.query('DELETE FROM product_drafts WHERE telegram_id = $1', [telegramId]);
         delete sohbetHafizasi[telegramId];
         delete geciciVeri[telegramId];
         

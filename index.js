@@ -774,7 +774,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// YETERSİZ JETON DURUMUNDA "Yetersiz Jeton" Uyarısı ve "Jeton Ekle" Butonu Eklenen Fonksiyon
+// KESİN ÇÖZÜM: answerOnce ile butona basıldığı an pop-up ve sonrasında Jeton Ekle butonlu mesaj iletilir
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     let callbackAnswered = false;
     async function answerOnce(message, options = {}) {
@@ -861,9 +861,9 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             return await answerOnce('❌ Cüzdan bilgisi doğrulanamadı. Lütfen tekrar deneyin.', { show_alert: true });
         }
 
-        // 5. Yetersiz bakiye durumu ("Yetersiz Jeton" uyarısı ve Jeton Ekle butonu)
+        // 5. Yetersiz bakiye durumu ("❌ Yetersiz jeton!" uyarısı ve Jeton Ekle butonu)
         if (currentBalance < gercekFiyat) {
-            await answerOnce('Yetersiz Jeton', { show_alert: true });
+            await answerOnce('❌ Yetersiz jeton!', { show_alert: true });
 
             try {
                 await bot.telegram.sendMessage(
@@ -880,7 +880,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
                     }
                 );
             } catch (err) {
-                console.error('Jeton bilgilendirme mesajı gönderilemedi:', {
+                console.error('Yetersiz jeton mesajı gönderilemedi:', {
                     telegramId,
                     error: err.message
                 });
@@ -902,7 +902,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const lockedBalance = Number(lockedWallet.rows[0].available_balance);
         if (lockedBalance < gercekFiyat) {
             await client.query('ROLLBACK');
-            return await answerOnce('Yetersiz Jeton', { show_alert: true });
+            return await answerOnce('❌ Yetersiz jeton!', { show_alert: true });
         }
 
         const bugun = new Date().toISOString().split('T')[0];

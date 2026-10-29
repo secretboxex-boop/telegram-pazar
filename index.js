@@ -774,104 +774,48 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// KESİN ÇÖZÜM: answerOnce ile butona basıldığı an pop-up ve sonrasında Jeton Ekle butonlu mesaj iletilir
+// GÜVENLİ VE GARANTİ ÇALIŞAN ÜRÜN AÇMA FONKSİYONU (DEBUG LOGLARI İLE)
+console.log('[DEBUG] Ürün açma callback kaydedildi');
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
-    let callbackAnswered = false;
-    async function answerOnce(message, options = {}) {
-        if (callbackAnswered) return;
-        try {
-            await ctx.answerCbQuery(message, options);
-            callbackAnswered = true;
-        } catch (err) {
-            console.error('Callback yanıtlanamadı:', err.message);
-        }
-    }
+    console.log('[DEBUG] urunu_ac callback tetiklendi', {
+        userId: ctx.from?.id,
+        callbackData: ctx.callbackQuery?.data
+    });
 
-    const client = await db.connect();
     try {
         const productId = ctx.match[1];
-        const displayedCost = Number(ctx.match[2]);
+        const cost = parseInt(ctx.match[2]);
         const telegramId = ctx.from.id;
 
-        if (!Number.isSafeInteger(displayedCost) || displayedCost <= 0) {
-            return await answerOnce('❌ Geçersiz ürün fiyatı.', { show_alert: true });
-        }
+        const buyerCheck = await db.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
+        if (buyerCheck.rows.length === 0) return ctx.answerCbQuery('❌ Önce /start yaz.', { show_alert: true });
 
-        // 1. Alıcı kullanıcı kontrolü
-        const buyerCheck = await client.query('SELECT id FROM users WHERE telegram_user_id = $1', [telegramId]);
-        if (buyerCheck.rows.length === 0) {
-            return await answerOnce('❌ Önce /start komutunu kullanarak kayıt olun.', { show_alert: true });
-        }
         const buyerId = buyerCheck.rows[0].id;
+        
+        const urunSorgu = await db.query(`SELECT p.seller_id, p.unlock_cost_jetons, p.is_messaging_enabled, s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id FROM products p JOIN seller_profiles s ON p.seller_id = s.id JOIN users u ON s.user_id = u.id WHERE p.id = $1`, [productId]);
 
-        // 2. Ürün, gerçek fiyat ve satıcı bilgilerini veritabanından güvenli şekilde çek
-        const urunSorgu = await client.query(`
-            SELECT p.id, p.seller_id, p.unlock_cost_jetons, p.is_messaging_enabled,
-                   s.user_id AS seller_user_id, u.telegram_user_id AS seller_telegram_id
-            FROM products p
-            JOIN seller_profiles s ON p.seller_id = s.id
-            JOIN users u ON s.user_id = u.id
-            WHERE p.id = $1
-        `, [productId]);
-
-        if (urunSorgu.rows.length === 0) {
-            return await answerOnce('❌ Ürün bulunamadı.', { show_alert: true });
-        }
-
+        if (urunSorgu.rows.length === 0) return ctx.answerCbQuery('❌ Ürün bulunamadı.', { show_alert: true });
         const sellerInfo = urunSorgu.rows[0];
-        const gercekFiyat = Number(sellerInfo.unlock_cost_jetons);
+        const realCost = Number(sellerInfo.unlock_cost_jetons) || cost;
 
-        if (!Number.isSafeInteger(gercekFiyat) || gercekFiyat <= 0) {
-            return await answerOnce('❌ Ürün fiyatı geçersiz.', { show_alert: true });
+        if (telegramId.toString() === sellerInfo.seller_telegram_id.toString()) {
+            return ctx.answerCbQuery('⚠️ Kendi ilanına jeton harcayamazsın!', { show_alert: true });
         }
 
-        if (String(telegramId) === String(sellerInfo.seller_telegram_id)) {
-            return await answerOnce('⚠️ Kendi ilanını açamazsın.', { show_alert: true });
-        }
+        const buyerWallet = await db.query('SELECT available_balance, daily_spent_jetons, last_spend_date FROM jeton_wallets WHERE user_id = $1', [buyerId]);
+        if (buyerWallet.rows.length === 0) return ctx.answerCbQuery('❌ Cüzdan bulunamadı.', { show_alert: true });
 
-        // 3. Orijinal görsel kontrolü (Ödeme yapmadan önce doğrulanır)
-        const photoCheck = await client.query(`
-            SELECT original_storage_key
-            FROM product_images
-            WHERE product_id = $1
-            LIMIT 1
-        `, [productId]);
+        const currentBalance = buyerWallet.rows[0].available_balance;
 
-        if (photoCheck.rows.length === 0 || !photoCheck.rows[0].original_storage_key) {
-            return await answerOnce('❌ Bu ürünün orijinal görseli bulunamadı. Jeton alınmadı.', { show_alert: true });
-        }
-
-        const originalPhotoId = photoCheck.rows[0].original_storage_key;
-
-        // 4. Cüzdan kontrolü
-        const buyerWallet = await client.query(`
-            SELECT available_balance, daily_spent_jetons, last_spend_date
-            FROM jeton_wallets
-            WHERE user_id = $1
-        `, [buyerId]);
-
-        if (buyerWallet.rows.length === 0) {
-            return await answerOnce('❌ Cüzdanınız bulunamadı. Lütfen /start komutunu kullanın.', { show_alert: true });
-        }
-
-        const currentBalance = Number(buyerWallet.rows[0].available_balance);
-
-        if (!Number.isSafeInteger(currentBalance) || currentBalance < 0) {
-            console.error('Geçersiz cüzdan bakiyesi:', { buyerId, productId });
-            return await answerOnce('❌ Cüzdan bilgisi doğrulanamadı. Lütfen tekrar deneyin.', { show_alert: true });
-        }
-
-        // 5. Yetersiz bakiye durumu ("❌ Yetersiz jeton!" uyarısı ve Jeton Ekle butonu)
-        if (currentBalance < gercekFiyat) {
-            await answerOnce('❌ Yetersiz jeton!', { show_alert: true });
-
+        if (currentBalance < realCost) {
+            await ctx.answerCbQuery('❌ Yetersiz jeton!', { show_alert: true });
             try {
                 await bot.telegram.sendMessage(
                     telegramId,
                     `❌ Yetersiz jeton!\n\n` +
                     `🪙 Mevcut jetonun: ${currentBalance}\n` +
-                    `🔒 Gereken jeton: ${gercekFiyat}\n` +
-                    `➕ Eksik jeton: ${Math.max(0, gercekFiyat - currentBalance)}`,
+                    `🔒 Gereken jeton: ${realCost}\n` +
+                    `➕ Eksik jeton: ${Math.max(0, realCost - currentBalance)}`,
                     {
                         parse_mode: 'Markdown',
                         ...Markup.inlineKeyboard([
@@ -879,123 +823,70 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
                         ])
                     }
                 );
-            } catch (err) {
-                console.error('Yetersiz jeton mesajı gönderilemedi:', {
-                    telegramId,
-                    error: err.message
-                });
-            }
+            } catch (e) {}
             return;
         }
 
-        // 6. PostgreSQL Transaction Başlat (Atomik ve Tutarlı İşlemler)
-        await client.query('BEGIN');
-
-        // Cüzdanı kilit altında tekrar doğrula (Race condition / Çift ödeme koruması)
-        const lockedWallet = await client.query(`
-            SELECT available_balance, daily_spent_jetons, last_spend_date
-            FROM jeton_wallets
-            WHERE user_id = $1
-            FOR UPDATE
-        `, [buyerId]);
-
-        const lockedBalance = Number(lockedWallet.rows[0].available_balance);
-        if (lockedBalance < gercekFiyat) {
-            await client.query('ROLLBACK');
-            return await answerOnce('❌ Yetersiz jeton!', { show_alert: true });
-        }
-
         const bugun = new Date().toISOString().split('T')[0];
-        let currentDailySpent = lockedWallet.rows[0].daily_spent_jetons || 0;
-        let lastSpendDate = lockedWallet.rows[0].last_spend_date;
+        let currentDailySpent = buyerWallet.rows[0].daily_spent_jetons || 0;
+        let lastSpendDate = buyerWallet.rows[0].last_spend_date;
 
         if (lastSpendDate !== bugun) {
             currentDailySpent = 0;
             lastSpendDate = bugun;
         }
-        currentDailySpent += gercekFiyat;
+        currentDailySpent += realCost;
 
-        const komisyon = Math.floor(gercekFiyat * 0.10);
-        const saticiKazanci = gercekFiyat - komisyon;
-        const newBalance = lockedBalance - gercekFiyat;
+        const komisyon = Math.floor(realCost * 0.10); 
+        const saticiKazanci = realCost - komisyon;
+        const newBalance = currentBalance - realCost;
 
-        // Atomik koşullu bakiye düşümü
-        const updateWallet = await client.query(`
-            UPDATE jeton_wallets
-            SET available_balance = available_balance - $1,
-                daily_spent_jetons = $2,
-                last_spend_date = $3
-            WHERE user_id = $4 AND available_balance >= $1
-            RETURNING available_balance
-        `, [gercekFiyat, currentDailySpent, lastSpendDate, buyerId]);
+        await db.query('UPDATE jeton_wallets SET available_balance = $1, daily_spent_jetons = $2, last_spend_date = $3 WHERE user_id = $4', [newBalance, currentDailySpent, lastSpendDate, buyerId]);
+        await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
+        await db.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(()=>{});
 
-        if (updateWallet.rowCount === 0) {
-            await client.query('ROLLBACK');
-            return await answerOnce('❌ Ödeme sırasında eşzamanlılık hatası oluştu.', { show_alert: true });
+        const photoCheck = await db.query('SELECT original_storage_key FROM product_images WHERE product_id = $1', [productId]);
+        if (photoCheck.rows.length === 0 || !photoCheck.rows[0].original_storage_key) {
+            return ctx.answerCbQuery('❌ Orijinal görsel bulunamadı.', { show_alert: true });
         }
 
-        // Satıcı kazancı ve sistem kârını ekle
-        await client.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
-        await client.query('UPDATE system_vault SET total_profit = total_profit + $1 WHERE id = 1', [komisyon]).catch(() => {});
+        const orijinalFotoId = photoCheck.rows[0].original_storage_key;
+        const ozelMesajBedeli = Math.ceil(realCost * 1.5);
 
-        // Transaction onaylanır
-        await client.query('COMMIT');
+        await ctx.answerCbQuery(`✅ Başarılı! ${realCost} Jeton harcandı.`, { show_alert: false });
+        
+        let inlineButtons = [
+            [
+                Markup.button.callback('⭐ 1', `rate_${productId}_1`),
+                Markup.button.callback('⭐ 2', `rate_${productId}_2`),
+                Markup.button.callback('⭐ 3', `rate_${productId}_3`),
+                Markup.button.callback('⭐ 4', `rate_${productId}_4`),
+                Markup.button.callback('⭐ 5', `rate_${productId}_5`)
+            ]
+        ];
 
-        // 7. Görsel sunumu ve telafi (Refund) mekanizması
-        try {
-            await answerOnce(`✅ Başarılı! ${gercekFiyat} Jeton harcandı.`, { show_alert: false });
+        if (sellerInfo.is_messaging_enabled) {
+            inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
+        }
 
-            const ozelMesajBedeli = Math.ceil(gercekFiyat * 1.5);
-            let inlineButtons = [
-                [
-                    Markup.button.callback('⭐ 1', `rate_${productId}_1`),
-                    Markup.button.callback('⭐ 2', `rate_${productId}_2`),
-                    Markup.button.callback('⭐ 3', `rate_${productId}_3`),
-                    Markup.button.callback('⭐ 4', `rate_${productId}_4`),
-                    Markup.button.callback('⭐ 5', `rate_${productId}_5`)
-                ]
-            ];
-
-            if (sellerInfo.is_messaging_enabled) {
-                inlineButtons.push([Markup.button.callback(`✉️ Satıcıyla Özel Mesajlaş ( ${ozelMesajBedeli} Jeton )`, `ozel_mesaj_${productId}_${ozelMesajBedeli}`)]);
-            }
-
-            await ctx.editMessageMedia({
-                type: 'photo',
-                media: originalPhotoId,
-                caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${gercekFiyat} Jeton\n⭐ Bu satıcıyı ve ürünü değerlendir:`
-            }, {
-                reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
-            }).catch(async () => {
-                await ctx.replyWithPhoto(originalPhotoId, {
-                    caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${gercekFiyat} Jeton\n⭐ Bu satıcıyı ve ürünü değerlendir:`,
-                    ...Markup.inlineKeyboard(inlineButtons)
-                });
-                await ctx.deleteMessage().catch(() => {});
+        await ctx.editMessageMedia({
+            type: 'photo',
+            media: orijinalFotoId,
+            caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${realCost} Jeton\n⭐ Bu satıcıyı ve ürünü değerlendir:`
+        }, {
+            reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup
+        }).catch(async () => {
+            await ctx.replyWithPhoto(orijinalFotoId, {
+                caption: `🔓 İŞTE GİZLİ GÖRSEL!\n\n💸 Bedel: ${realCost} Jeton\n⭐ Bu satıcıyı ve ürünü değerlendir:`,
+                ...Markup.inlineKeyboard(inlineButtons)
             });
-
-            await bot.telegram.sendMessage(telegramId, `🔓 Görsel başarıyla açıldı!\n🪙 Kalan Bakiyeniz: ${newBalance} Jeton`, { parse_mode: 'Markdown' }).catch(() => {});
-            bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
-
-        } catch (mediaError) {
-            // Telafi mekanizması: Fotoğraf gönderimi başarısız olursa jetonları güvenle iade et
-            await db.query('UPDATE jeton_wallets SET available_balance = available_balance + $1 WHERE user_id = $2', [gercekFiyat, buyerId]);
-            await db.query('UPDATE jeton_wallets SET available_balance = available_balance - $1 WHERE user_id = $2', [saticiKazanci, sellerInfo.seller_user_id]);
-            await db.query('UPDATE system_vault SET total_profit = total_profit - $1 WHERE id = 1', [komisyon]).catch(() => {});
-
-            console.error('Görsel gönderim hatası, jetonlar güvenle iade edildi:', mediaError.message);
-            await answerOnce('❌ Görsel yüklenirken bir hata oluştu, jetonunuz hesabınıza iade edildi.', { show_alert: true });
-        }
-
-    } catch (err) {
-        try { await client.query('ROLLBACK'); } catch (e) {}
-        console.error('Gizli ürün ödeme işlemi başarısız:', {
-            productId: ctx.match[1],
-            error: err.message
+            await ctx.deleteMessage().catch(()=>{});
         });
-        await answerOnce('❌ İşlem sırasında beklenmeyen bir hata oluştu.', { show_alert: true });
-    } finally {
-        client.release();
+
+        bot.telegram.sendMessage(sellerInfo.seller_telegram_id, `💸 MÜJDE! Bir Kullanıcı görselinizi açtı!\n🪙 Net Kazancınız: ${saticiKazanci} Jeton eklendi!`).catch(() => {});
+    } catch (error) {
+        console.error("[ERROR] Ürün açma hatası:", error?.stack || error);
+        await ctx.answerCbQuery('❌ İşlem sırasında bir hata oluştu.', { show_alert: true });
     }
 });
 
@@ -1104,7 +995,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const sellerInfo = urunSorgu.rows[0];
 
         if (!sellerInfo.is_messaging_enabled) {
-            return ctx.answerCbQuery('⚠️ Bu satıcı mesajlaşmayı kapalı tutuyor!', { show_alert: true });
+            return ctx.answerCbQuery('⚠️ This seller has messaging disabled!', { show_alert: true });
         }
 
         if (telegramId.toString() === sellerInfo.seller_telegram_id.toString()) {

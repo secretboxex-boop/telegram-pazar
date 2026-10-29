@@ -774,7 +774,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// GÜVENLİ VE HATASIZ DÜZELTİLMİŞ ÜRÜN AÇMA FONKSİYONU
+// YETERSİZ JETON DURUMUNDA "Yetersiz Jeton" Uyarısı ve "Jeton Ekle" Butonu Eklenen Fonksiyon
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     let callbackAnswered = false;
     async function answerOnce(message, options = {}) {
@@ -861,20 +861,21 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
             return await answerOnce('❌ Cüzdan bilgisi doğrulanamadı. Lütfen tekrar deneyin.', { show_alert: true });
         }
 
-        // 5. Yetersiz bakiye durumu
+        // 5. Yetersiz bakiye durumu ("Yetersiz Jeton" uyarısı ve Jeton Ekle butonu)
         if (currentBalance < gercekFiyat) {
-            await answerOnce(`🪙 ${gercekFiyat} jeton gerekiyor. Bakiyeniz: ${currentBalance}.`, { show_alert: true });
+            await answerOnce('Yetersiz Jeton', { show_alert: true });
 
             try {
                 await bot.telegram.sendMessage(
                     telegramId,
-                    `🪙 Bu görseli açmak için ${gercekFiyat} jeton gerekiyor.\n` +
-                    `Mevcut bakiyeniz: ${currentBalance} jeton.\n\n` +
-                    `Jeton yüklemek için aşağıdaki butonu kullanabilirsiniz:`,
+                    `❌ Yetersiz jeton!\n\n` +
+                    `🪙 Mevcut jetonun: ${currentBalance}\n` +
+                    `🔒 Gereken jeton: ${gercekFiyat}\n` +
+                    `➕ Eksik jeton: ${Math.max(0, gercekFiyat - currentBalance)}`,
                     {
                         parse_mode: 'Markdown',
                         ...Markup.inlineKeyboard([
-                            [Markup.button.callback('🪙 Jeton Paketlerini Gör', 'menu_jeton_ekle')]
+                            [Markup.button.callback('🪙 Jeton Ekle', 'menu_jeton_ekle')]
                         ])
                     }
                 );
@@ -901,7 +902,7 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const lockedBalance = Number(lockedWallet.rows[0].available_balance);
         if (lockedBalance < gercekFiyat) {
             await client.query('ROLLBACK');
-            return await answerOnce('❌ Yetersiz bakiye.', { show_alert: true });
+            return await answerOnce('Yetersiz Jeton', { show_alert: true });
         }
 
         const bugun = new Date().toISOString().split('T')[0];

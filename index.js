@@ -774,7 +774,7 @@ bot.hears(['🏪 İlan Ver', 'İlan Ver'], async (ctx) => {
     } catch (error) {}
 });
 
-// BURASI KESİN ÇÖZÜM: show_alert: true yapılarak o hata penceresi yerine kullanıcıya istediğin yazı gösteriliyor
+// KESİN ÇÖZÜM: show_alert: false yapılarak Telegram'ın o hata pop-up'ı tamamen kapatıldı ve kullanıcıya doğrudan mesaj atılıyor
 bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
     try {
         const productId = ctx.match[1];
@@ -799,8 +799,8 @@ bot.action(/urunu_ac_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < cost) {
-            // İşte Telegram'ın o hata penceresini tamamen ezen ve istediğin yazıyı ekranda çıkaran kesin çözüm satırı:
-            await ctx.answerCbQuery(`✨ Görseli açabilmek için lütfen menüden jeton ekle! Gerekli: ${cost} Jeton, Mevcut: ${currentBalance} Jeton.`, { show_alert: true });
+            // show_alert: false yapılarak Telegram'ın hata penceresi (pop-up) kesinlikle açılmıyor!
+            await ctx.answerCbQuery('✨ Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
             
             try {
                 await bot.telegram.sendMessage(
@@ -975,7 +975,7 @@ bot.action(/ozel_mesaj_(\d+)_(\d+)/, async (ctx) => {
         const currentBalance = buyerWallet.rows[0].available_balance;
 
         if (currentBalance < pmCost) {
-            await ctx.answerCbQuery(`✨ Görseli açabilmek için lütfen menüden jeton ekle! Gerekli: ${pmCost} Jeton, Mevcut: ${currentBalance} Jeton.`, { show_alert: true });
+            await ctx.answerCbQuery('✨ Jeton ekleme seçenekleri özel mesajınıza gönderildi!', { show_alert: false });
             
             try {
                 await bot.telegram.sendMessage(
